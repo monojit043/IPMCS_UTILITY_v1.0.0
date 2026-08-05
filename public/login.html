@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>PIMS-MTO · Engineers India Limited</title>
+<link rel="stylesheet" href="../css/design.css"/>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css"/>
+<style>
+body { overflow: hidden; }
+
+/* ── Background ── */
+.bg {
+  position: fixed; inset: 0;
+  background: var(--bg-root);
+  overflow: hidden;
+}
+.bg-grid {
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(rgba(30,144,255,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(30,144,255,0.04) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+.bg-radial {
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse 80% 60% at 60% 50%, rgba(30,144,255,0.07) 0%, transparent 70%);
+}
+.bg-vignette {
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse 100% 100% at 50% 50%, transparent 40%, rgba(2,12,22,0.85) 100%);
+}
+.scanline {
+  position: absolute; left: 0; right: 0; height: 2px;
+  background: linear-gradient(transparent, rgba(30,144,255,0.08), transparent);
+  animation: scanline 6s linear infinite;
+  pointer-events: none;
+}
+
+/* ── Layout ── */
+.page {
+  position: relative; z-index: 1;
+  height: 100vh;
+  display: grid;
+  grid-template-columns: 1fr 480px;
+}
+
+/* ── Left panel ── */
+.left-panel {
+  display: flex; flex-direction: column;
+  justify-content: space-between;
+  padding: 40px 60px;
+}
+.eil-mark {
+  display: flex; align-items: center; gap: 12px;
+}
+.eil-logo-box {
+  width: 44px; height: 44px;
+  background: var(--blue-dim);
+  border: 1px solid var(--border-med);
+  border-radius: var(--r-md);
+  display: flex; align-items: center; justify-content: center;
+}
+.eil-logo-box i { font-size: 22px; color: var(--blue); }
+.eil-name {
+  font-family: var(--font-display);
+  font-size: 20px; font-weight: 700;
+  color: var(--t1); letter-spacing: .02em;
+}
+.eil-sub {
+  font-size: 11px; color: var(--t3);
+  font-family: var(--font-display);
+  letter-spacing: .06em; text-transform: uppercase;
+}
+
+.left-hero { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.hero-label {
+  font-family: var(--font-display);
+  font-size: 11px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--blue);
+  margin-bottom: 20px;
+  display: flex; align-items: center; gap: 8px;
+}
+.hero-label::before {
+  content: ''; display: block;
+  width: 32px; height: 1px; background: var(--blue);
+}
+.hero-title {
+  font-family: var(--font-display);
+  font-size: clamp(38px, 4vw, 56px);
+  font-weight: 700; line-height: 1.05;
+  color: var(--t1);
+  margin-bottom: 20px;
+}
+.hero-title span { color: var(--blue); }
+.hero-desc {
+  font-size: 15px; color: var(--t2);
+  max-width: 420px; line-height: 1.7;
+  margin-bottom: 40px;
+}
+
+.feature-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.pill {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-dim);
+  border-radius: 20px;
+  font-size: 12px; color: var(--t2);
+}
+.pill i { font-size: 13px; color: var(--blue); }
+
+.left-footer {
+  display: flex; gap: 24px;
+  font-size: 11px; color: var(--t4);
+}
+
+/* ── Right panel (login form) ── */
+.right-panel {
+  border-left: 1px solid var(--border-dim);
+  background: linear-gradient(180deg, var(--bg-panel) 0%, var(--bg-deep) 100%);
+  display: flex; flex-direction: column;
+  justify-content: center;
+  padding: 48px 52px;
+  position: relative; overflow: hidden;
+}
+.right-panel::before {
+  content: '';
+  position: absolute; top: -120px; right: -80px;
+  width: 320px; height: 320px;
+  background: radial-gradient(circle, rgba(30,144,255,0.06) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.form-header { margin-bottom: 36px; }
+.form-header-tag {
+  font-family: var(--font-mono);
+  font-size: 10px; color: var(--blue);
+  letter-spacing: .1em; text-transform: uppercase;
+  margin-bottom: 10px;
+  display: flex; align-items: center; gap: 6px;
+}
+.form-header-tag::after {
+  content: '';
+  flex: 1; height: 1px;
+  background: linear-gradient(90deg, var(--border-soft), transparent);
+}
+.form-title {
+  font-family: var(--font-display);
+  font-size: 28px; font-weight: 700;
+  color: var(--t1); letter-spacing: .02em;
+  margin-bottom: 6px;
+}
+.form-subtitle { font-size: 13px; color: var(--t3); }
+
+.form-group { margin-bottom: 18px; }
+.form-label {
+  display: block; font-size: 11px; font-weight: 600;
+  font-family: var(--font-display); letter-spacing: .06em;
+  text-transform: uppercase; color: var(--t2);
+  margin-bottom: 7px;
+}
+
+/* Role selector */
+.role-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; }
+.role-card {
+  padding: 10px 8px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-md);
+  text-align: center; cursor: pointer;
+  transition: all .18s ease;
+}
+.role-card:hover { border-color: var(--border-med); background: var(--bg-hover); }
+.role-card.active {
+  border-color: var(--blue);
+  background: var(--blue-dim);
+  box-shadow: 0 0 12px rgba(30,144,255,0.12);
+}
+.role-card i { font-size: 20px; color: var(--t3); display: block; margin-bottom: 4px; transition: color .18s; }
+.role-card.active i { color: var(--blue); }
+.role-card span { font-size: 10px; font-family: var(--font-display); font-weight: 600;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--t3); transition: color .18s; }
+.role-card.active span { color: var(--blue); }
+
+.form-footer { margin-top: 24px; }
+.btn-login {
+  width: 100%; justify-content: center;
+  padding: 13px 16px; font-size: 14px;
+  position: relative; overflow: hidden;
+}
+.btn-login::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+  transform: translateX(-100%);
+  transition: transform .5s ease;
+}
+.btn-login:hover::after { transform: translateX(100%); }
+
+.form-divider {
+  display: flex; align-items: center; gap: 12px;
+  margin: 20px 0;
+  font-size: 11px; color: var(--t4);
+}
+.form-divider::before, .form-divider::after {
+  content: ''; flex: 1; height: 1px;
+  background: var(--border-dim);
+}
+
+.system-info {
+  position: absolute; bottom: 28px; left: 52px; right: 52px;
+  display: flex; align-items: center; justify-content: space-between;
+  font-family: var(--font-mono); font-size: 9px;
+  color: var(--t4); letter-spacing: .04em;
+}
+.sys-dot { animation: pulse 2s ease infinite; }
+
+/* Password visibility toggle */
+.pw-wrap { position: relative; }
+.pw-toggle {
+  position: absolute; right: 10px; top: 50%;
+  transform: translateY(-50%);
+  background: none; border: none; cursor: pointer;
+  color: var(--t3); font-size: 16px; padding: 2px;
+  transition: color .15s;
+}
+.pw-toggle:hover { color: var(--t2); }
+
+/* Error state */
+.field-error {
+  font-size: 11px; color: var(--red);
+  margin-top: 5px; display: none;
+}
+.input-err { border-color: rgba(224,82,82,.4) !important; }
+.input-err:focus { box-shadow: 0 0 0 3px rgba(224,82,82,.1) !important; }
+
+/* Loading spinner */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner {
+  width: 16px; height: 16px;
+  border: 2px solid rgba(255,255,255,0.2);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+  display: none;
+}
+</style>
+</head>
+<body>
+
+<div class="bg">
+  <div class="bg-grid"></div>
+  <div class="bg-radial"></div>
+  <div class="bg-vignette"></div>
+  <div class="scanline"></div>
+</div>
+
+<div class="page">
+  <!-- LEFT: Hero -->
+  <div class="left-panel anim-fade-up">
+    <div class="eil-mark">
+      <div class="eil-logo-box"><i class="ti ti-building-factory-2"></i></div>
+      <div>
+        <div class="eil-name">Engineers India Limited</div>
+        <div class="eil-sub">Piping Division · EPC Department</div>
+      </div>
+    </div>
+
+    <div class="left-hero">
+      <div class="hero-label">Piping MTO Platform</div>
+      <h1 class="hero-title">Material<br>Take<span>Off</span><br>System</h1>
+      <p class="hero-desc">
+        Intelligent comparison of manual field takeoff against 3D model extractions.
+        Capture, upload, reconcile and sign off — all in one workflow.
+      </p>
+      <div class="feature-pills">
+        <div class="pill"><i class="ti ti-topology-star"></i>P&ID Viewer</div>
+        <div class="pill"><i class="ti ti-list-check"></i>Manual MTO</div>
+        <div class="pill"><i class="ti ti-upload"></i>Model Dump</div>
+        <div class="pill"><i class="ti ti-git-compare"></i>Smart Reconcile</div>
+        <div class="pill"><i class="ti ti-file-export"></i>Report Export</div>
+        <div class="pill"><i class="ti ti-chart-bar"></i>Variance Dashboard</div>
+      </div>
+    </div>
+
+    <div class="left-footer">
+      <span>PIMS Integration</span>
+      <span>·</span>
+      <span>PDH-PP Project</span>
+      <span>·</span>
+      <span>v2.4.1</span>
+    </div>
+  </div>
+
+  <!-- RIGHT: Login form -->
+  <div class="right-panel">
+    <div class="form-header anim-fade-up">
+      <div class="form-header-tag">Secure Access</div>
+      <div class="form-title">Sign In</div>
+      <div class="form-subtitle">Use your EIL network credentials</div>
+    </div>
+
+    <form id="loginForm" autocomplete="off">
+      <!-- Role selector -->
+      <div class="form-group anim-fade-up anim-delay-1">
+        <label class="form-label">Your Role</label>
+        <div class="role-grid">
+          <div class="role-card active" data-role="JE" onclick="selectRole(this)">
+            <i class="ti ti-pencil"></i>
+            <span>JE</span>
+          </div>
+          <div class="role-card" data-role="LE" onclick="selectRole(this)">
+            <i class="ti ti-user-check"></i>
+            <span>LE</span>
+          </div>
+          <div class="role-card" data-role="GL" onclick="selectRole(this)">
+            <i class="ti ti-shield-check"></i>
+            <span>GL</span>
+          </div>
+        </div>
+        <input type="hidden" id="roleInput" value="JE"/>
+      </div>
+
+      <!-- Employee ID -->
+      <div class="form-group anim-fade-up anim-delay-2">
+        <label class="form-label" for="empId">Employee ID</label>
+        <div class="input-wrap">
+          <i class="ti ti-id-badge"></i>
+          <input class="has-icon" type="text" id="empId" placeholder="e.g. EIL-04821"
+                 autocomplete="username" spellcheck="false"/>
+        </div>
+        <div class="field-error" id="empIdErr">Employee ID is required</div>
+      </div>
+
+      <!-- Password -->
+      <div class="form-group anim-fade-up anim-delay-3">
+        <label class="form-label" for="password">Password</label>
+        <div class="pw-wrap">
+          <div class="input-wrap">
+            <i class="ti ti-lock"></i>
+            <input class="has-icon" type="password" id="password" placeholder="••••••••"
+                   autocomplete="current-password"/>
+          </div>
+          <button type="button" class="pw-toggle" onclick="togglePw()" id="pwToggle">
+            <i class="ti ti-eye" id="pwIcon"></i>
+          </button>
+        </div>
+        <div class="field-error" id="pwErr">Password is required</div>
+      </div>
+
+      <!-- Project selector -->
+      <div class="form-group anim-fade-up anim-delay-4">
+        <label class="form-label">Project</label>
+        <div class="input-wrap">
+          <i class="ti ti-briefcase"></i>
+          <select class="has-icon" id="project">
+            <option>PDH-PP · GAIL Pata (Active)</option>
+            <option>CGD-MH-01 · MNGL</option>
+            <option>HPCL-BPC · Bhatinda</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-footer anim-fade-up anim-delay-5">
+        <button type="submit" class="btn btn-primary btn-login">
+          <span id="btnText">Access Workspace</span>
+          <div class="spinner" id="spinner"></div>
+          <i class="ti ti-arrow-right" id="btnIcon"></i>
+        </button>
+      </div>
+    </form>
+
+    <div class="form-divider anim-fade-up">OR</div>
+
+    <div style="display:flex;gap:8px;" class="anim-fade-up">
+      <button class="btn btn-ghost" style="flex:1;justify-content:center;font-size:12px"
+              onclick="demoLogin('JE')">
+        <i class="ti ti-player-play"></i> Demo as JE
+      </button>
+      <button class="btn btn-ghost" style="flex:1;justify-content:center;font-size:12px"
+              onclick="demoLogin('LE')">
+        <i class="ti ti-player-play"></i> Demo as LE
+      </button>
+    </div>
+
+    <div class="system-info">
+      <span>PIMS-MTO v2.4.1</span>
+      <span style="display:flex;align-items:center;gap:5px;">
+        <span class="dot dot-cyan sys-dot" style="width:6px;height:6px;"></span>
+        System Online
+      </span>
+      <span>EIL · Piping Div.</span>
+    </div>
+  </div>
+</div>
+
+<script>
+function selectRole(el) {
+  document.querySelectorAll('.role-card').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('roleInput').value = el.dataset.role;
+}
+
+function togglePw() {
+  const inp = document.getElementById('password');
+  const icon = document.getElementById('pwIcon');
+  if (inp.type === 'password') {
+    inp.type = 'text';
+    icon.className = 'ti ti-eye-off';
+  } else {
+    inp.type = 'password';
+    icon.className = 'ti ti-eye';
+  }
+}
+
+function showError(id, msg) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+function clearErrors() {
+  document.querySelectorAll('.field-error').forEach(e => e.style.display = 'none');
+  document.querySelectorAll('.input-err').forEach(e => e.classList.remove('input-err'));
+}
+
+function setLoading(on) {
+  document.getElementById('spinner').style.display = on ? 'block' : 'none';
+  document.getElementById('btnIcon').style.display = on ? 'none' : 'block';
+  document.getElementById('btnText').textContent = on ? 'Authenticating…' : 'Access Workspace';
+  document.querySelector('.btn-login').disabled = on;
+}
+
+document.getElementById('loginForm').addEventListener('submit', function(e) {
+  e.preventDefault();
+  clearErrors();
+  const emp = document.getElementById('empId').value.trim();
+  const pw  = document.getElementById('password').value;
+  let ok = true;
+  if (!emp) { showError('empIdErr','Employee ID is required'); document.getElementById('empId').classList.add('input-err'); ok=false; }
+  if (!pw)  { showError('pwErr','Password is required');    document.getElementById('password').classList.add('input-err'); ok=false; }
+  if (!ok) return;
+  setLoading(true);
+  setTimeout(() => {
+    setLoading(false);
+    const role = document.getElementById('roleInput').value;
+    sessionStorage.setItem('mto_user', JSON.stringify({ emp, role, name: emp }));
+    window.location.href = 'workspace.html';
+  }, 1400);
+});
+
+function demoLogin(role) {
+  setLoading(true);
+  const names = { JE:'Monojit Sarkar', LE:'R. K. Sharma', GL:'D. N. Joshi' };
+  setTimeout(() => {
+    sessionStorage.setItem('mto_user', JSON.stringify({ emp:'DEMO', role, name: names[role] }));
+    window.location.href = 'workspace.html';
+  }, 900);
+}
+</script>
+</body>
+</html>
