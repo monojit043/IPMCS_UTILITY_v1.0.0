@@ -1,3 +1,6 @@
+// Already signed in to ePULSE / MRCS / SSMS on this host → straight in, no password
+DataStore.ssoLogin().then((ok) => { if (ok) window.location.replace('workspace.html'); });
+
 document.getElementById('pwToggle').addEventListener('click', () => {
   const input = document.getElementById('password');
   const icon = document.getElementById('pwIcon');

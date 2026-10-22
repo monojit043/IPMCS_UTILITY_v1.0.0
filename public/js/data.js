@@ -102,6 +102,28 @@ const DataStore = (() => {
       method: 'POST',
       body: JSON.stringify({ empId, password }),
     });
+    return acceptLogin(result);
+  }
+
+  // Already signed in to ePULSE / MRCS / SSMS on this host (eil_sso cookie) —
+  // no password needed. Resolves false when not signed in anywhere.
+  async function ssoLogin() {
+    try {
+      const result = await apiFetch('/auth/sso', { method: 'POST' });
+      acceptLogin(result);
+      return true;
+    } catch (err) {
+      return false;
+    }
+  }
+
+  // Ends the shared sign-on too, so every app on this host is signed out
+  async function logout() {
+    try { await apiFetch('/auth/logout', { method: 'POST' }); } catch (err) { /* still clear locally */ }
+    clearSession();
+  }
+
+  function acceptLogin(result) {
     if (result.needsSelection) {
       sessionStorage.setItem('ipmcs_pending_assignment', JSON.stringify({
         preAuthToken: result.preAuthToken,
@@ -152,7 +174,8 @@ const DataStore = (() => {
   }
 
   /* Cascading line-identity lookups: Service -> Sequence No -> Zone. Queried
-     live against PIMS_SQL.piping_line_list on the backend. Unit No is fixed
+     live against ePULSE (line list + lines read off current P&IDs) on the
+     backend; zones are IPMCS's own. Unit No is fixed
      by the logged-in session's PIMS assignment, not picked here — see
      currentUser.unitNo in workspace.js. resolveLine is the moment the line
      actually gets pulled in and saved into our own lines table. */
@@ -264,7 +287,7 @@ const DataStore = (() => {
   }
 
   return {
-    login, selectAssignment, getSession, clearSession, getPendingAssignment, clearPendingAssignment,
+    login, ssoLogin, logout, selectAssignment, getSession, clearSession, getPendingAssignment, clearPendingAssignment,
     getLines, getLine, setLineStatus,
     getServices, getSequences, getZones, resolveLine,
     getMTOItems, addMTOItem, updateMTOItemQty, deleteMTOItem,

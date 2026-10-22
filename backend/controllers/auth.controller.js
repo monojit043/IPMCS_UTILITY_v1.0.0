@@ -1,5 +1,6 @@
 const HttpError = require('../middlewares/HttpError');
 const authService = require('../services/auth.service');
+const sso = require('../utils/sso');
 
 async function finalizeLogin({ empId, name, role, jobNo, unitNo, jobName }) {
   const id = await authService.upsertLocalUser(empId, name);
@@ -17,6 +18,31 @@ async function login(req, res) {
   const employee = await authService.verifyCredentials(empId, password);
   if (!employee) throw new HttpError(401, 'Invalid employee ID or password');
 
+  // Logging in here also signs in to ePULSE / MRCS / SSMS (same host)
+  sso.setCookie(res, employee.empId);
+  await startSession(employee, res);
+}
+
+// Arriving from the ePULSE gateway (or any app on the same host) already
+// signed in: the eil_sso cookie is enough, no password asked.
+async function ssoLogin(req, res) {
+  const empId = sso.currentUserId(req);
+  if (!empId) throw new HttpError(401, 'Not signed in');
+  const employee = await authService.getActiveEmployee(empId);
+  if (!employee) {
+    sso.clearCookie(res);
+    throw new HttpError(401, 'Your account is not active');
+  }
+  await startSession(employee, res);
+}
+
+// Signing out of IPMCS signs out of every app on this host
+function logout(req, res) {
+  sso.clearCookie(res);
+  res.status(204).end();
+}
+
+async function startSession(employee, res) {
   const role = await authService.getIpmcsRole(employee.empId);
   const assignments = await authService.getAssignments(employee.empId);
 
@@ -71,4 +97,4 @@ function me(req, res) {
   res.json({ user: req.user });
 }
 
-module.exports = { login, selectAssignment, me };
+module.exports = { login, ssoLogin, logout, selectAssignment, me };

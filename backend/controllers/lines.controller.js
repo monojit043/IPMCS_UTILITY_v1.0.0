@@ -39,8 +39,9 @@ async function lookup(req, res) {
   if (!service || !seq || !zone) {
     throw new HttpError(400, 'service, seq and zone are required');
   }
-  const line = await linesService.resolveLine(req.user.jobNo, req.user.unitNo, service, seq, zone);
-  if (!line) throw new HttpError(404, 'No line matches that Service / Sequence / Zone combination');
+  if (!linesService.normalizeZone(zone)) throw new HttpError(400, 'Zone must be 1–3 letters or digits, e.g. A');
+  const line = await linesService.resolveLine(req.user.jobNo, req.user.unitNo, service, seq, zone, req.user.empId);
+  if (!line) throw new HttpError(404, 'No line matches that Service / Sequence No in the line list or the uploaded P&IDs');
   res.json(line);
 }
 

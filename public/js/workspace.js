@@ -153,8 +153,8 @@ function initPendingAssignment(pending) {
 }
 
 function bindGlobalEvents() {
-  document.getElementById('logoutBtn').addEventListener('click', () => {
-    DataStore.clearSession();
+  document.getElementById('logoutBtn').addEventListener('click', async () => {
+    await DataStore.logout();   // also signs out of ePULSE / MRCS / SSMS (shared sign-on)
     window.location.href = 'index.html';
   });
 
@@ -307,19 +307,43 @@ function createMtoController(cfg) {
     clearSelection();
   }
 
+  // Zones aren't in the line list or the P&IDs — they're set here: the zones
+  // already used for this line (or "A" for a new one), plus "Add zone…" for
+  // when a line is split between engineers.
+  const NEW_ZONE = '__new__';
+  function fillZones(zones) {
+    fillSelect(ids.zone, zones, 'Select…');
+    if (zones.length) el('zone').insertAdjacentHTML('beforeend', `<option value="${NEW_ZONE}">+ Add zone…</option>`);
+  }
+
   async function onSeqChange() {
     const service = el('service').value, seq = el('seq').value;
-    fillSelect(ids.zone, seq ? await DataStore.getZones(service, seq) : [], 'Select…');
+    fillZones(seq ? await DataStore.getZones(service, seq) : []);
     el('zone').disabled = !seq;
     clearSelection();
   }
 
   async function onZoneChange() {
-    const service = el('service').value, seq = el('seq').value, zone = el('zone').value;
+    const service = el('service').value, seq = el('seq').value;
+    let zone = el('zone').value;
+    if (zone === NEW_ZONE) {
+      const typed = (prompt('New zone for this line (1–3 letters or digits, e.g. B):') || '').trim().toUpperCase();
+      if (!/^[A-Z0-9]{1,3}$/.test(typed)) {
+        el('zone').value = '';
+        if (typed) showToast('error', 'Invalid zone', 'Use 1–3 letters or digits, e.g. B');
+        clearSelection();
+        return;
+      }
+      if (![...el('zone').options].some(o => o.value === typed)) {
+        el('zone').querySelector(`option[value="${NEW_ZONE}"]`).insertAdjacentHTML('beforebegin', `<option value="${typed}">${typed}</option>`);
+      }
+      el('zone').value = zone = typed;
+    }
     if (!zone) { clearSelection(); return; }
     try {
       const line = await DataStore.resolveLine(service, seq, zone);
       if (line) await loadLine(line);
+      else showToast('error', 'Could not open line', 'Not found in the line list or the uploaded P&IDs');
     } catch (err) {
       showToast('error', 'Could not open line', err.message);
     }
@@ -331,7 +355,7 @@ function createMtoController(cfg) {
     fillSelect(ids.seq, await DataStore.getSequences(line.service), 'Select…');
     el('seq').disabled = false; el('seq').value = line.seqNo;
 
-    fillSelect(ids.zone, await DataStore.getZones(line.service, line.seqNo), 'Select…');
+    fillZones(await DataStore.getZones(line.service, line.seqNo));
     el('zone').disabled = false; el('zone').value = line.zone;
   }
 
@@ -352,7 +376,10 @@ function createMtoController(cfg) {
     el('ldLineNo').textContent = line.lineNo || '—';
     el('ldPipingSpec').textContent = line.pipingSpec || '—';
     el('ldSize').textContent = line.sizeIn || '—';
-    el('ldSource').textContent = line.source || '—';
+    // Where the data came from; hover shows the P&ID(s) and any line list ≠ P&ID differences
+    const SOURCE_LABELS = { line_list: 'Line list', pid: 'P&ID only', 'line_list+pid': 'Line list + P&ID' };
+    el('ldSource').textContent = (SOURCE_LABELS[line.source] || line.source || '—') + (line.dataMismatch ? ' ⚠' : '');
+    el('ldSource').title = [line.pidNo && `P&ID: ${line.pidNo}`, line.dataMismatch && `Differs: ${line.dataMismatch}`].filter(Boolean).join('\n');
     el('ldCreatedBy').textContent = line.createdBy || '—';
     el('ldCreatedAt').textContent = line.createdAt ? new Date(line.createdAt).toLocaleDateString() : '—';
     el('ldOpPressure').textContent = line.opPressure || '—';

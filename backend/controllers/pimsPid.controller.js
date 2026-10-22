@@ -26,11 +26,13 @@ async function streamFile(req, res) {
   const doc = await pimsPid.getCurrentDocument(req.params.masterIndexId);
   if (!doc) throw new HttpError(404, 'Document not found');
 
-  const root = process.env.PIMS_PID_FILES_ROOT;
-  if (!root) throw new HttpError(500, 'PIMS_PID_FILES_ROOT is not configured');
+  // ePULSE's uploads folder — pid_documents.file_path ("B862/101/PID/…pdf") is relative to it
+  const root = process.env.EPULSE_UPLOADS_ROOT;
+  if (!root) throw new HttpError(500, 'EPULSE_UPLOADS_ROOT is not configured');
 
-  const fullPath = path.join(root, doc.filePath);
-  if (!fullPath.startsWith(path.resolve(root))) throw new HttpError(400, 'Invalid file path');
+  const base = path.resolve(root);
+  const fullPath = path.resolve(base, doc.filePath);
+  if (!fullPath.startsWith(base + path.sep)) throw new HttpError(400, 'Invalid file path');
   if (!fs.existsSync(fullPath)) throw new HttpError(404, 'P&ID file not found on disk');
 
   res.setHeader('Content-Type', 'application/pdf');

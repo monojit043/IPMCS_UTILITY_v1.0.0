@@ -248,3 +248,15 @@ CREATE TABLE IF NOT EXISTS pid_zone_breaks (
 -- browsing the P&ID library with no line context.
 ALTER TABLE pid_zone_breaks ADD COLUMN IF NOT EXISTS zone_a VARCHAR(10);
 ALTER TABLE pid_zone_breaks ADD COLUMN IF NOT EXISTS zone_b VARCHAR(10);
+
+-- Lines now come from ePULSE (line_list + lines read off current P&IDs, see
+-- lines.service.js) instead of PIMS_SQL. Neither source has a zone, so the
+-- zone is set by the engineer in IPMCS. Line-list sizes can list several
+-- ("4\", 2\""), so size / line no. are widened. pid_no = every P&ID the line
+-- appears on; data_mismatch = where line list and P&ID disagree.
+ALTER TABLE lines ADD COLUMN IF NOT EXISTS pid_no TEXT;
+ALTER TABLE lines ADD COLUMN IF NOT EXISTS data_mismatch TEXT;
+ALTER TABLE lines ALTER COLUMN size_in TYPE VARCHAR(60);
+ALTER TABLE lines ALTER COLUMN line_no TYPE VARCHAR(150);
+ALTER TABLE lines ALTER COLUMN piping_spec TYPE VARCHAR(40);
+ALTER TABLE lines ALTER COLUMN created_by TYPE VARCHAR(50);

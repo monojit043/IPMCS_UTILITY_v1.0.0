@@ -7,14 +7,23 @@ const baseConfig = {
   password: process.env.DB_PASSWORD,
 };
 
+// IPMCS's own data: MTO / dump / extracted items, lines being worked on,
+// P&ID folders, highlights, the ADMIN list.
 const pool = new Pool({ ...baseConfig, database: process.env.DB_NAME });
 
-// Read-only pools onto the two other databases on the same Postgres server:
-// employee identity/credentials, and PIMS project/unit role assignments.
-const masterEmployeePool = new Pool({ ...baseConfig, database: process.env.MASTER_EMPLOYEE_DB_NAME });
-const pimsPool = new Pool({ ...baseConfig, database: process.env.PIMS_DB_NAME });
+// ePULSE, READ-ONLY. Everything IPMCS doesn't own is read live from here —
+// nothing is copied:
+//   - login, jobs/units  → pc2_emp.users, user_role_assignments, projects
+//                          (ePULSE links these live to PC-2)
+//   - line list          → line_list
+//   - P&IDs              → pid_master_index, pid_documents, pid_extracted_lines
+const epulsePool = new Pool({
+  ...baseConfig,
+  database: process.env.EPULSE_DB_NAME,
+  options: '-c default_transaction_read_only=on',
+});
 
-for (const p of [pool, masterEmployeePool, pimsPool]) {
+for (const p of [pool, epulsePool]) {
   p.on('error', (err) => {
     console.error('Unexpected error on idle Postgres client', err);
   });
@@ -22,9 +31,7 @@ for (const p of [pool, masterEmployeePool, pimsPool]) {
 
 module.exports = {
   pool,
-  masterEmployeePool,
-  pimsPool,
+  epulsePool,
   query: (text, params) => pool.query(text, params),
-  queryMasterEmployee: (text, params) => masterEmployeePool.query(text, params),
-  queryPims: (text, params) => pimsPool.query(text, params),
+  queryEpulse: (text, params) => epulsePool.query(text, params),
 };

@@ -1,8 +1,9 @@
-const { query, queryPims } = require('../config/db');
+const { query, queryEpulse } = require('../config/db');
 
 const LINE_COLUMNS = `
   id, job_no AS "jobNo", unit_no AS "unitNo", zone, line_no AS "lineNo", seq_no AS "seqNo",
-  size_in AS "sizeIn", service, piping_spec AS "pipingSpec", source,
+  size_in AS "sizeIn", service, piping_spec AS "pipingSpec", source, pid_no AS "pidNo",
+  data_mismatch AS "dataMismatch",
   created_by AS "createdBy", created_at AS "createdAt",
   op_pressure AS "opPressure", op_temp AS "opTemp",
   design_pressure AS "designPressure", design_temp AS "designTemp",
@@ -12,38 +13,123 @@ const LINE_COLUMNS = `
 
 const combine = (value, unit) => (value ? [value, unit].filter(Boolean).join(' ') : null);
 
-// Process/design data lives in a different PIMS table (linelist_lines) than
-// line identity (piping_line_list), keyed differently: linelist_lines has no
-// zone, and its job_no is only trustworthy via the linelist_uploads join —
-// pid_no on linelist_lines itself is not a reliable job_no source. Applies
-// to every zone/subline of a line, since it's not tracked per-zone there.
-async function getDesignData(jobNo, unitNo, service, seqNo) {
-  const { rows } = await queryPims(
-    `SELECT ll.operating_press, ll.operating_press_unit, ll.operating_temp, ll.operating_temp_unit,
-            ll.design_press, ll.design_press_unit, ll.design_temp, ll.design_temp_unit,
-            ll.insulation, ll.insulation_thickness
-     FROM linelist_lines ll
-     JOIN linelist_uploads lu ON lu.id = ll.upload_id
-     WHERE lu.job_no = $1 AND lu.is_latest = true
-       AND split_part(ll.unit_no, ' ', 1) = $2
-       AND ll.service = $3 AND ll.line_no = $4
-     LIMIT 1`,
+// Where lines come from (both read live from ePULSE, nothing copied):
+//   1. line_list — the uploaded line list: size, class, insulation, design /
+//      operating P&T, P&ID no. Its unit_no reads "101 (PDH Unit)", so match on
+//      parent_unit or the leading unit number.
+//   2. pid_extracted_lines — lines read off the CURRENT revision of each
+//      uploaded P&ID: size, spec, insulation only.
+// Neither has a zone — zones are set by the engineer in IPMCS (see getZones).
+const LL_SCOPE = `project_id = $1 AND (parent_unit = $2 OR split_part(unit_no, ' ', 1) = $2)`;
+const PID_LINES = `
+  FROM pid_extracted_lines e
+  JOIN pid_documents d ON d.id = e.document_id AND d.status = 'current'
+  JOIN pid_master_index m ON m.id = e.master_index_id AND m.status = 'active'
+  WHERE m.job_no = $1 AND e.unit_no = $2`;
+
+async function getServices(jobNo, unitNo) {
+  const { rows } = await queryEpulse(
+    `SELECT service FROM line_list WHERE ${LL_SCOPE} AND coalesce(service, '') <> ''
+     UNION
+     SELECT e.service ${PID_LINES} AND coalesce(e.service, '') <> ''
+     ORDER BY 1`,
+    [jobNo, unitNo]
+  );
+  return rows.map((r) => r.service);
+}
+
+async function getSequences(jobNo, unitNo, service) {
+  const { rows } = await queryEpulse(
+    `SELECT line_no AS seq FROM line_list WHERE ${LL_SCOPE} AND service = $3 AND coalesce(line_no, '') <> ''
+     UNION
+     SELECT e.seq_no ${PID_LINES} AND e.service = $3 AND coalesce(e.seq_no, '') <> ''
+     ORDER BY 1`,
+    [jobNo, unitNo, service]
+  );
+  return rows.map((r) => r.seq);
+}
+
+// Zones already in use for this line in IPMCS; "A" when it hasn't been
+// worked on yet. The engineer can add more (B, C…) when a line is split.
+async function getZones(jobNo, unitNo, service, seqNo) {
+  const { rows } = await query(
+    `SELECT DISTINCT zone FROM lines
+     WHERE job_no = $1 AND unit_no = $2 AND service = $3 AND seq_no = $4 ORDER BY zone`,
     [jobNo, unitNo, service, seqNo]
   );
-  const d = rows[0];
-  if (!d) return {};
+  return rows.length ? rows.map((r) => r.zone) : ['A'];
+}
+
+const ZONE_RE = /^[A-Z0-9]{1,3}$/;
+function normalizeZone(zone) {
+  const z = String(zone || '').trim().toUpperCase();
+  return ZONE_RE.test(z) ? z : null;
+}
+
+// Everything both sources know about one line. Line list wins for size /
+// spec / insulation; the P&ID fills gaps; any disagreement is recorded.
+async function readSources(jobNo, unitNo, service, seqNo) {
+  const [{ rows: ll }, { rows: pid }] = await Promise.all([
+    queryEpulse(
+      `SELECT line_size, line_class, insulation, insulation_thickness, pid_no,
+              oper_press, oper_press_unit, oper_temp, oper_temp_unit,
+              design_press, design_press_unit, design_temp, design_temp_unit
+       FROM line_list WHERE ${LL_SCOPE} AND service = $3 AND line_no = $4
+       ORDER BY id LIMIT 1`,
+      [jobNo, unitNo, service, seqNo]
+    ),
+    queryEpulse(
+      `SELECT e.full_line_no, e.size_in, e.piping_spec, e.insul_type, m.pid_name
+       ${PID_LINES} AND e.service = $3 AND e.seq_no = $4
+       ORDER BY m.pid_name, e.id`,
+      [jobNo, unitNo, service, seqNo]
+    ),
+  ]);
+  return { ll: ll[0] || null, pid };
+}
+
+const sameValue = (a, b) => String(a || '').replace(/["\s]/g, '').toUpperCase()
+  === String(b || '').replace(/["\s]/g, '').toUpperCase();
+// The line list may give several sizes ("4\", 2\"") — a P&ID size matching any of them is fine
+const sizeListed = (llSize, pidSize) => String(llSize || '').split(',').some((s) => sameValue(s, pidSize));
+
+function mergeSources({ ll, pid }) {
+  const p = pid[0] || {};
+  const size = ll?.line_size || p.size_in || null;
+  const spec = ll?.line_class || p.piping_spec || null;
+  const insul = ll?.insulation || p.insul_type || null;
+
+  const mismatches = [];
+  if (ll && pid.length) {
+    const pidSizes = [...new Set(pid.map((r) => r.size_in).filter(Boolean))];
+    const pidSpecs = [...new Set(pid.map((r) => r.piping_spec).filter(Boolean))];
+    const pidInsul = [...new Set(pid.map((r) => r.insul_type).filter(Boolean))];
+    const badSizes = pidSizes.filter((s) => ll.line_size && !sizeListed(ll.line_size, s));
+    if (badSizes.length) mismatches.push(`Size: line list ${ll.line_size}, P&ID ${badSizes.join(', ')}`);
+    const badSpecs = pidSpecs.filter((s) => ll.line_class && !sameValue(ll.line_class, s));
+    if (badSpecs.length) mismatches.push(`Spec: line list ${ll.line_class}, P&ID ${badSpecs.join(', ')}`);
+    const badInsul = pidInsul.filter((s) => ll.insulation && !sameValue(ll.insulation, s));
+    if (badInsul.length) mismatches.push(`Insulation: line list ${ll.insulation}, P&ID ${badInsul.join(', ')}`);
+  }
+
+  const pidNames = new Set(pid.map((r) => r.pid_name));
+  String(ll?.pid_no || '').split(',').map((s) => s.trim()).filter(Boolean).forEach((n) => pidNames.add(n));
+
   return {
-    opPressure: combine(d.operating_press, d.operating_press_unit),
-    opTemp: combine(d.operating_temp, d.operating_temp_unit),
-    designPressure: combine(d.design_press, d.design_press_unit),
-    designTemp: combine(d.design_temp, d.design_temp_unit),
-    insulationType: d.insulation || null,
-    insulationThickness: d.insulation_thickness || null,
+    size, spec, insul,
+    source: ll && pid.length ? 'line_list+pid' : ll ? 'line_list' : 'pid',
+    pidNo: [...pidNames].join(', ') || null,
+    mismatch: mismatches.join('; ') || null,
+    opPressure: combine(ll?.oper_press, ll?.oper_press_unit),
+    opTemp: combine(ll?.oper_temp, ll?.oper_temp_unit),
+    designPressure: combine(ll?.design_press, ll?.design_press_unit),
+    designTemp: combine(ll?.design_temp, ll?.design_temp_unit),
+    insulationThickness: ll?.insulation_thickness || null,
   };
 }
 
 // "lines" holds only lines actually brought into IPMCS for MTO work, not a
-// full mirror of PIMS — so this reads locally, no PIMS call here.
+// full mirror of the line list — so this reads locally.
 async function getAllLines(jobNo, unitNo) {
   const { rows } = await query(
     `SELECT ${LINE_COLUMNS} FROM lines WHERE job_no = $1 AND unit_no = $2 ORDER BY id`,
@@ -65,68 +151,38 @@ async function updateLineStatus(id, status, itemsCount) {
   return rows[0] || null;
 }
 
-// Browsing the cascading dropdowns queries PIMS_SQL.piping_line_list live —
-// nothing is written locally just from looking around. A local lines row
-// only gets created once a specific line is resolved (see resolveLine
-// below), i.e. actually selected for MTO work.
-async function getServices(jobNo, unitNo) {
-  const { rows } = await queryPims(
-    `SELECT DISTINCT service FROM piping_line_list WHERE job_no = $1 AND unit_no = $2 ORDER BY service`,
-    [jobNo, unitNo]
-  );
-  return rows.map((r) => r.service);
-}
-
-async function getSequences(jobNo, unitNo, service) {
-  const { rows } = await queryPims(
-    `SELECT DISTINCT seq_no FROM piping_line_list WHERE job_no = $1 AND unit_no = $2 AND service = $3 ORDER BY seq_no`,
-    [jobNo, unitNo, service]
-  );
-  return rows.map((r) => r.seq_no);
-}
-
-async function getZones(jobNo, unitNo, service, seqNo) {
-  const { rows } = await queryPims(
-    `SELECT DISTINCT zone FROM piping_line_list
-     WHERE job_no = $1 AND unit_no = $2 AND service = $3 AND seq_no = $4 ORDER BY zone`,
-    [jobNo, unitNo, service, seqNo]
-  );
-  return rows.map((r) => r.zone);
-}
-
-// The moment a line is actually selected for MTO work: pulled live from
-// PIMS, then upserted into our own lines table so it has a stable local id
+// The moment a line + zone is actually selected for MTO work: read live from
+// ePULSE, then upserted into our own lines table so it has a stable local id
 // to hang mto_items/dump_items/extracted_items off of. IPMCS-only tracking
-// fields (status, items_count) are left untouched on conflict — only the
-// PIMS-sourced identity columns are refreshed.
-async function resolveLine(jobNo, unitNo, service, seqNo, zone) {
-  const { rows: pimsRows } = await queryPims(
-    `SELECT job_no, unit_no, zone, line_no, seq_no, size_in, service, piping_spec, source, created_by
-     FROM piping_line_list
-     WHERE job_no = $1 AND unit_no = $2 AND service = $3 AND seq_no = $4 AND zone = $5`,
-    [jobNo, unitNo, service, seqNo, zone]
-  );
-  const p = pimsRows[0];
-  if (!p) return null;
+// fields (status, items_count, created_by) are left untouched on conflict —
+// only the source-derived columns are refreshed.
+async function resolveLine(jobNo, unitNo, service, seqNo, zone, empId) {
+  const z = normalizeZone(zone);
+  if (!z) return null;
+  const src = await readSources(jobNo, unitNo, service, seqNo);
+  if (!src.ll && !src.pid.length) return null;
+  const m = mergeSources(src);
 
-  const d = await getDesignData(jobNo, unitNo, service, seqNo);
-
+  const lineNo = [m.size, service, unitNo, seqNo, m.spec, m.insul].filter(Boolean).join('-');
   const { rows } = await query(
     `INSERT INTO lines (
        job_no, unit_no, zone, line_no, seq_no, size_in, service, piping_spec, source, created_by,
-       op_pressure, op_temp, design_pressure, design_temp, insulation_type, insulation_thickness
+       op_pressure, op_temp, design_pressure, design_temp, insulation_type, insulation_thickness,
+       pid_no, data_mismatch
      )
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
      ON CONFLICT (job_no, unit_no, service, seq_no, zone)
      DO UPDATE SET line_no = EXCLUDED.line_no, piping_spec = EXCLUDED.piping_spec,
-       size_in = EXCLUDED.size_in, source = EXCLUDED.source, created_by = EXCLUDED.created_by,
+       size_in = EXCLUDED.size_in, source = EXCLUDED.source,
        op_pressure = EXCLUDED.op_pressure, op_temp = EXCLUDED.op_temp,
        design_pressure = EXCLUDED.design_pressure, design_temp = EXCLUDED.design_temp,
-       insulation_type = EXCLUDED.insulation_type, insulation_thickness = EXCLUDED.insulation_thickness
+       insulation_type = EXCLUDED.insulation_type, insulation_thickness = EXCLUDED.insulation_thickness,
+       pid_no = EXCLUDED.pid_no, data_mismatch = EXCLUDED.data_mismatch
      RETURNING ${LINE_COLUMNS}`,
     [
-      p.job_no, p.unit_no, p.zone, p.line_no, p.seq_no, p.size_in, p.service, p.piping_spec, p.source, p.created_by,
-      d.opPressure, d.opTemp, d.designPressure, d.designTemp, d.insulationType, d.insulationThickness,
+      jobNo, unitNo, z, lineNo, seqNo, m.size, service, m.spec, m.source, empId || null,
+      m.opPressure, m.opTemp, m.designPressure, m.designTemp, m.insul, m.insulationThickness,
+      m.pidNo, m.mismatch,
     ]
   );
   return rows[0];
@@ -134,5 +190,5 @@ async function resolveLine(jobNo, unitNo, service, seqNo, zone) {
 
 module.exports = {
   getAllLines, getLineById, updateLineStatus,
-  getServices, getSequences, getZones, resolveLine,
+  getServices, getSequences, getZones, resolveLine, normalizeZone,
 };
