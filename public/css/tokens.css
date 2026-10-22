@@ -1,0 +1,92 @@
+/* Design tokens — single source of truth for color, type, spacing, radius */
+:root {
+  /* Surfaces */
+  --color-bg:            #0a0e14;
+  --color-surface:       #0f1520;
+  --color-surface-alt:   #141b28;
+  --color-surface-raised:#1a2333;
+  --color-surface-hover: #202b3d;
+
+  /* Borders */
+  --color-border:        rgba(255,255,255,0.06);
+  --color-border-strong: rgba(255,255,255,0.12);
+  --color-border-accent: rgba(47,125,250,0.35);
+
+  /* Accent (single primary hue) */
+  --color-accent:        #2f7dfa;
+  --color-accent-strong: #5b9cff;
+  --color-accent-soft:   rgba(47,125,250,0.12);
+
+  /* Semantic status colors */
+  --color-success:      #22c58e;
+  --color-success-soft: rgba(34,197,142,0.12);
+  --color-warning:      #e8a33d;
+  --color-warning-soft: rgba(232,163,61,0.12);
+  --color-danger:       #ef5b5b;
+  --color-danger-soft:  rgba(239,91,91,0.12);
+
+  /* Text */
+  --text-primary:   #eef3f9;
+  --text-secondary: #8fa3bd;
+  --text-muted:     #4c6178;
+  --text-faint:     #2a3a4d;
+
+  /* Faint overlay (theme-aware whitewash/blackwash for subtle fills) */
+  --overlay-faint: rgba(255,255,255,0.04);
+
+  /* Type */
+  --font-display: 'Rajdhani', sans-serif;
+  --font-body:    'DM Sans', sans-serif;
+  --font-mono:    'JetBrains Mono', monospace;
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  /* Spacing scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 150ms;
+  --dur-med:  220ms;
+}
+
+/* Light theme — applied when <html data-theme="light">, set by js/theme.js */
+:root[data-theme="light"] {
+  --color-bg:             #f3f5f8;
+  --color-surface:        #ffffff;
+  --color-surface-alt:    #eef1f5;
+  --color-surface-raised: #e5e9ef;
+  --color-surface-hover:  #dae0e8;
+
+  --color-border:        rgba(15,23,42,0.08);
+  --color-border-strong: rgba(15,23,42,0.14);
+  --color-border-accent: rgba(31,111,235,0.35);
+
+  --color-accent:        #2f7dfa;
+  --color-accent-strong: #1f6feb;
+  --color-accent-soft:   rgba(47,125,250,0.10);
+
+  --color-success:      #148a5f;
+  --color-success-soft: rgba(20,138,95,0.10);
+  --color-warning:      #a8650a;
+  --color-warning-soft: rgba(168,101,10,0.10);
+  --color-danger:       #d13a3a;
+  --color-danger-soft:  rgba(209,58,58,0.10);
+
+  --text-primary:   #101826;
+  --text-secondary: #48607a;
+  --text-muted:     #7c93aa;
+  --text-faint:     #a9b8c8;
+
+  --overlay-faint: rgba(15,23,42,0.035);
+}

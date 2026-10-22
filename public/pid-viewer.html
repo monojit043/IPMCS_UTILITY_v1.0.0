@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>P&amp;ID Viewer · IPMCS</title>
+<script>document.documentElement.setAttribute('data-theme', localStorage.getItem('ipmcs_theme') || 'dark');</script>
+<link rel="stylesheet" href="css/tokens.css"/>
+<link rel="stylesheet" href="css/base.css"/>
+<link rel="stylesheet" href="css/components.css"/>
+<link rel="stylesheet" href="css/pid-viewer.css"/>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css"/>
+</head>
+<body>
+<div class="viewer-app">
+
+  <div class="viewer-topbar">
+    <div class="viewer-brand"><i class="ti ti-file-type-pdf"></i><span id="viewerTitle">P&amp;ID Viewer</span></div>
+    <span class="badge badge-accent" id="sheetBadge">—</span>
+    <div style="flex:1"></div>
+    <button class="theme-toggle" title="Toggle light / dark theme"><i class="ti ti-sun"></i></button>
+    <button class="btn btn-ghost btn-sm" id="closeBtn"><i class="ti ti-x"></i>Close</button>
+  </div>
+
+  <div class="pdf-toolbar">
+    <div class="tool-btn" id="zoomOutBtn" title="Zoom out"><i class="ti ti-zoom-out"></i></div>
+    <span class="zoom-label" id="zoomLabel">100%</span>
+    <div class="tool-btn" id="zoomInBtn" title="Zoom in"><i class="ti ti-zoom-in"></i></div>
+    <div class="tool-btn" id="zoomResetBtn" title="Reset zoom"><i class="ti ti-maximize"></i></div>
+    <div class="tool-sep"></div>
+    <div class="tool-btn" id="prevPageBtn" title="Previous page"><i class="ti ti-chevron-left"></i></div>
+    <span class="zoom-label" id="pageLabel">Page 1 / 1</span>
+    <div class="tool-btn" id="nextPageBtn" title="Next page"><i class="ti ti-chevron-right"></i></div>
+    <div class="tool-sep"></div>
+    <div class="tool-btn" id="highlightToggleBtn" title="Highlight — mark the portion you've completed MTO for">
+      <i class="ti ti-highlight"></i>
+    </div>
+    <div class="tool-btn" id="undoBtn" title="Undo last stroke"><i class="ti ti-arrow-back-up"></i></div>
+    <div class="tool-btn" id="clearBtn" title="Clear your highlights"><i class="ti ti-eraser"></i></div>
+    <span class="badge badge-success" id="highlightBadge" style="display:none">Highlighting…</span>
+    <div style="flex:1"></div>
+    <span class="badge badge-muted" id="saveStatusBadge"><i class="ti ti-device-floppy" style="font-size:11px"></i> Autosaved</span>
+  </div>
+
+  <div class="viewer-legend" id="viewerLegend"></div>
+
+  <div class="pdf-scroll-wrap" id="pdfScrollWrap">
+    <div class="pdf-page-stack" id="pdfPageStack">
+      <canvas id="pdfCanvas"></canvas>
+      <canvas id="annotationCanvas"></canvas>
+    </div>
+    <div class="pdf-loading" id="pdfLoading">
+      <i class="ti ti-loader-2 pdf-spin"></i>
+      <span>Loading P&amp;ID…</span>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast">
+  <span class="toast-icon" id="toastIcon"></span>
+  <div>
+    <div class="toast-title" id="toastTitle"></div>
+    <div class="toast-sub" id="toastSub"></div>
+  </div>
+</div>
+
+<script src="js/data.js"></script>
+<script src="js/theme.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="js/pid-viewer.js"></script>
+</body>
+</html>

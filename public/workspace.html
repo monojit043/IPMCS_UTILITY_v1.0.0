@@ -3,367 +3,20 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>MTO Workspace · PIMS</title>
-<link rel="stylesheet" href="../css/design.css"/>
+<title>Workspace · IPMCS</title>
+<script>document.documentElement.setAttribute('data-theme', localStorage.getItem('ipmcs_theme') || 'dark');</script>
+<link rel="stylesheet" href="css/tokens.css"/>
+<link rel="stylesheet" href="css/base.css"/>
+<link rel="stylesheet" href="css/components.css"/>
+<link rel="stylesheet" href="css/workspace.css"/>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css"/>
-<style>
-html, body { height: 100%; overflow: hidden; }
-
-/* ── App Shell ── */
-.app { display: flex; flex-direction: column; height: 100vh; }
-
-/* ── Top Bar ── */
-.topbar {
-  height: 48px; flex-shrink: 0;
-  background: var(--bg-panel);
-  border-bottom: 1px solid var(--border-dim);
-  display: flex; align-items: center;
-  padding: 0 16px; gap: 0;
-  position: relative; z-index: 100;
-}
-.tb-brand {
-  display: flex; align-items: center; gap: 9px;
-  font-family: var(--font-display); font-size: 16px; font-weight: 700;
-  color: var(--t1); letter-spacing: .03em;
-  padding-right: 16px;
-  border-right: 1px solid var(--border-dim);
-  margin-right: 16px;
-}
-.tb-brand i { color: var(--blue); font-size: 18px; }
-
-/* Breadcrumb steps */
-.steps { display: flex; align-items: center; gap: 0; }
-.step {
-  display: flex; align-items: center; gap: 6px;
-  padding: 5px 12px; border-radius: 6px;
-  font-family: var(--font-display); font-size: 12px; font-weight: 600;
-  letter-spacing: .04em; color: var(--t4); cursor: default;
-  transition: all .18s;
-}
-.step i { font-size: 14px; }
-.step-arrow { color: var(--t4); font-size: 12px; margin: 0 2px; }
-.step.done   { color: var(--cyan); }
-.step.active { color: var(--t1); background: var(--blue-dim); border: 1px solid var(--border-soft); }
-.step.pending{ color: var(--t4); }
-
-.tb-right {
-  margin-left: auto;
-  display: flex; align-items: center; gap: 10px;
-}
-.project-pill {
-  display: flex; align-items: center; gap: 6px;
-  padding: 4px 10px; border-radius: 6px;
-  background: var(--bg-raised); border: 1px solid var(--border-soft);
-  font-size: 11px; color: var(--t2); font-family: var(--font-mono);
-}
-.project-pill i { font-size: 13px; color: var(--blue); }
-.user-btn {
-  display: flex; align-items: center; gap: 7px;
-  padding: 4px 10px; border-radius: 6px; cursor: pointer;
-  background: var(--bg-raised); border: 1px solid var(--border-soft);
-  font-size: 12px; color: var(--t2);
-  transition: border-color .18s;
-}
-.user-btn:hover { border-color: var(--border-med); color: var(--t1); }
-.avatar {
-  width: 24px; height: 24px; border-radius: 50%;
-  background: linear-gradient(135deg, var(--blue), var(--cyan));
-  display: flex; align-items: center; justify-content: center;
-  font-size: 9px; font-weight: 700; color: #fff;
-  font-family: var(--font-display); flex-shrink: 0;
-}
-
-/* ── Main layout: sidebar + content ── */
-.main { flex: 1; display: flex; overflow: hidden; }
-
-/* ── Sidebar ── */
-.sidebar {
-  width: 260px; flex-shrink: 0;
-  background: var(--bg-panel);
-  border-right: 1px solid var(--border-dim);
-  display: flex; flex-direction: column;
-  overflow: hidden;
-}
-.sb-head {
-  padding: 12px 14px 10px;
-  border-bottom: 1px solid var(--border-dim);
-}
-.sb-head-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.sb-title { font-family: var(--font-display); font-size: 13px; font-weight: 700; color: var(--t2); letter-spacing: .05em; }
-.sb-count { font-family: var(--font-mono); font-size: 10px; color: var(--t3); }
-
-/* Filter chips */
-.filter-chips { display: flex; gap: 5px; flex-wrap: wrap; }
-.chip {
-  padding: 3px 9px; border-radius: 12px; font-size: 10px; font-weight: 600;
-  font-family: var(--font-display); letter-spacing: .04em; cursor: pointer;
-  border: 1px solid var(--border-dim); color: var(--t3); background: transparent;
-  transition: all .15s;
-}
-.chip:hover { border-color: var(--border-soft); color: var(--t2); }
-.chip.active { background: var(--blue-dim); border-color: var(--border-med); color: var(--blue); }
-.chip.cyan   { background: var(--cyan-dim); border-color: rgba(0,212,170,.2); color: var(--cyan); }
-.chip.amber  { background: var(--amber-dim); border-color: rgba(245,166,35,.2); color: var(--amber); }
-.chip.red    { background: var(--red-dim); border-color: rgba(224,82,82,.2); color: var(--red); }
-
-/* Line list */
-.line-list { flex: 1; overflow-y: auto; padding: 4px 0; }
-.line-item {
-  padding: 10px 14px; cursor: pointer;
-  border-left: 3px solid transparent;
-  border-bottom: 1px solid var(--border-dim);
-  transition: all .15s;
-}
-.line-item:hover { background: var(--bg-hover); border-left-color: var(--border-med); }
-.line-item.active {
-  background: var(--bg-hover);
-  border-left-color: var(--blue);
-}
-.line-item.matched  { border-left-color: var(--cyan) !important; }
-.line-item.variance { border-left-color: var(--red)  !important; }
-
-.li-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
-.li-tag {
-  font-family: var(--font-mono); font-size: 12px; font-weight: 500;
-  color: var(--t1);
-}
-.li-meta { font-size: 11px; color: var(--t3); margin-bottom: 5px; }
-.li-footer { display: flex; align-items: center; justify-content: space-between; }
-.li-items { font-size: 10px; color: var(--t4); font-family: var(--font-mono); }
-
-.sb-footer {
-  border-top: 1px solid var(--border-dim); padding: 10px 14px;
-  display: flex; gap: 6px;
-}
-
-/* ── Content area ── */
-.content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-
-/* ── PID + MTO split ── */
-.workspace {
-  flex: 1; display: grid;
-  grid-template-columns: 1fr 1fr;
-  overflow: hidden;
-}
-
-/* Resizer */
-.resizer {
-  width: 4px; background: var(--border-dim); cursor: col-resize;
-  transition: background .15s; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-}
-.resizer:hover { background: var(--blue); }
-.resizer-dots {
-  display: flex; flex-direction: column; gap: 3px;
-}
-.resizer-dots span {
-  width: 2px; height: 2px; border-radius: 50%;
-  background: var(--t4);
-}
-
-/* Panel header */
-.pane-header {
-  height: 42px; flex-shrink: 0;
-  background: var(--bg-card);
-  border-bottom: 1px solid var(--border-dim);
-  display: flex; align-items: center;
-  padding: 0 14px; gap: 8px;
-}
-.pane-title { font-family: var(--font-display); font-size: 12px; font-weight: 700;
-  letter-spacing: .06em; text-transform: uppercase; color: var(--t2); flex: 1; }
-.pane-actions { display: flex; align-items: center; gap: 6px; }
-
-/* ── PID Pane ── */
-.pid-pane { display: flex; flex-direction: column; border-right: 1px solid var(--border-dim); overflow: hidden; }
-.pid-toolbar {
-  height: 38px; flex-shrink: 0;
-  background: var(--bg-deep);
-  border-bottom: 1px solid var(--border-dim);
-  display: flex; align-items: center;
-  padding: 0 10px; gap: 6px;
-}
-.tb-btn {
-  width: 28px; height: 28px;
-  background: var(--bg-raised); border: 1px solid var(--border-soft);
-  border-radius: var(--r-sm); display: flex; align-items: center; justify-content: center;
-  cursor: pointer; font-size: 14px; color: var(--t2); transition: all .15s;
-}
-.tb-btn:hover { background: var(--bg-hover); color: var(--t1); border-color: var(--border-med); }
-.tb-sep { width: 1px; height: 18px; background: var(--border-dim); margin: 0 2px; }
-.pid-zoom-label { font-family: var(--font-mono); font-size: 10px; color: var(--t3); min-width: 34px; text-align: center; }
-
-.pid-canvas-wrap {
-  flex: 1; overflow: hidden; position: relative;
-  background: #020d18;
-  background-image:
-    linear-gradient(rgba(30,144,255,0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(30,144,255,0.03) 1px, transparent 1px);
-  background-size: 30px 30px;
-}
-#pidCanvas { width: 100%; height: 100%; cursor: grab; display: block; }
-#pidCanvas.grabbing { cursor: grabbing; }
-.pid-sheet-label {
-  position: absolute; bottom: 8px; left: 10px;
-  font-family: var(--font-mono); font-size: 9px; color: var(--t4); letter-spacing: .06em;
-}
-.pid-legend {
-  position: absolute; top: 8px; right: 8px;
-  background: var(--bg-panel); border: 1px solid var(--border-dim);
-  border-radius: var(--r-sm); padding: 7px 10px;
-  font-size: 10px; color: var(--t3);
-}
-.legend-row { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
-.legend-row:last-child { margin-bottom: 0; }
-.legend-line { width: 20px; height: 2px; border-radius: 1px; }
-
-/* ── MTO Pane ── */
-.mto-pane { display: flex; flex-direction: column; overflow: hidden; }
-.mto-toolbar {
-  height: 44px; flex-shrink: 0;
-  background: var(--bg-deep);
-  border-bottom: 1px solid var(--border-dim);
-  display: flex; align-items: center;
-  padding: 0 12px; gap: 8px;
-}
-
-/* MTO Table */
-.table-wrap { flex: 1; overflow-y: auto; }
-table {
-  width: 100%; border-collapse: collapse;
-  font-size: 12px;
-}
-thead th {
-  background: var(--bg-card); padding: 8px 10px;
-  text-align: left; border-bottom: 1px solid var(--border-soft);
-  font-family: var(--font-display); font-size: 10px; font-weight: 700;
-  letter-spacing: .07em; text-transform: uppercase; color: var(--t3);
-  position: sticky; top: 0; z-index: 1; white-space: nowrap;
-}
-thead th:first-child { padding-left: 14px; }
-tbody tr { border-bottom: 1px solid var(--border-dim); transition: background .12s; }
-tbody tr:hover { background: var(--bg-hover); }
-tbody tr.row-hi { background: rgba(30,144,255,0.06); }
-tbody td { padding: 9px 10px; color: var(--t1); vertical-align: middle; }
-tbody td:first-child { padding-left: 14px; }
-
-.td-tag  { font-family: var(--font-mono); font-size: 11px; color: var(--blue); }
-.td-num  { font-family: var(--font-mono); font-size: 12px; text-align: right; }
-.td-acts { display: flex; gap: 5px; justify-content: flex-end; }
-
-/* Inline edit */
-.inline-input {
-  background: var(--bg-card); border: 1px solid var(--border-med);
-  border-radius: 4px; padding: 3px 7px;
-  font-family: var(--font-mono); font-size: 11px; color: var(--t1);
-  width: 56px; outline: none;
-}
-.inline-input:focus { border-color: var(--blue); box-shadow: 0 0 0 2px rgba(30,144,255,.1); }
-
-/* Empty state */
-.empty-state {
-  flex: 1; display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  gap: 10px; padding: 40px;
-}
-.empty-icon { font-size: 48px; color: var(--t4); }
-.empty-msg  { font-size: 14px; color: var(--t3); text-align: center; }
-.empty-sub  { font-size: 12px; color: var(--t4); text-align: center; }
-
-/* MTO summary strip */
-.mto-summary {
-  height: 40px; flex-shrink: 0;
-  background: var(--bg-deep); border-top: 1px solid var(--border-dim);
-  display: flex; align-items: center; padding: 0 14px; gap: 20px;
-}
-.sum-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--t3); }
-.sum-val  { font-family: var(--font-mono); font-size: 12px; color: var(--t1); font-weight: 500; }
-
-/* ── Add Item modal ── */
-.modal-overlay {
-  position: fixed; inset: 0; z-index: 500;
-  background: rgba(2,12,22,0.85);
-  display: flex; align-items: center; justify-content: center;
-  padding: 20px; opacity: 0; pointer-events: none;
-  transition: opacity .2s;
-}
-.modal-overlay.open { opacity: 1; pointer-events: all; }
-.modal {
-  background: var(--bg-card); border: 1px solid var(--border-med);
-  border-radius: var(--r-xl); padding: 0;
-  width: 100%; max-width: 540px;
-  transform: translateY(20px);
-  transition: transform .25s cubic-bezier(0.22,1,0.36,1);
-  overflow: hidden;
-}
-.modal-overlay.open .modal { transform: translateY(0); }
-
-.modal-header {
-  padding: 18px 22px 16px;
-  border-bottom: 1px solid var(--border-dim);
-  display: flex; align-items: center; gap: 10px;
-}
-.modal-title { font-family: var(--font-display); font-size: 17px; font-weight: 700; flex: 1; }
-.modal-close { width: 28px; height: 28px; border-radius: 6px;
-  background: var(--bg-raised); border: 1px solid var(--border-soft);
-  cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center;
-  color: var(--t2); transition: all .15s; }
-.modal-close:hover { background: var(--bg-hover); color: var(--t1); }
-
-.modal-body { padding: 20px 22px; }
-.modal-footer { padding: 14px 22px; border-top: 1px solid var(--border-dim);
-  display: flex; justify-content: flex-end; gap: 8px; }
-
-.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
-.form-row.triple { grid-template-columns: 1fr 1fr 1fr; }
-.form-col { display: flex; flex-direction: column; gap: 5px; }
-.form-col label { font-family: var(--font-display); font-size: 10px; font-weight: 700;
-  letter-spacing: .07em; text-transform: uppercase; color: var(--t3); }
-
-/* Category tags for item type */
-.cat-grid { display: flex; gap: 5px; flex-wrap: wrap; }
-.cat-btn {
-  padding: 4px 10px; border-radius: 5px; cursor: pointer;
-  font-family: var(--font-display); font-size: 10px; font-weight: 600; letter-spacing: .04em;
-  border: 1px solid var(--border-dim); color: var(--t3); background: transparent; transition: all .15s;
-}
-.cat-btn:hover { border-color: var(--border-soft); color: var(--t2); }
-.cat-btn.active { background: var(--blue-dim); border-color: var(--border-med); color: var(--blue); }
-
-/* Status bar */
-.statusbar {
-  height: 28px; flex-shrink: 0;
-  background: var(--bg-deep); border-top: 1px solid var(--border-dim);
-  display: flex; align-items: center; padding: 0 16px; gap: 20px;
-  font-family: var(--font-mono); font-size: 9px; color: var(--t4); letter-spacing: .04em;
-}
-.sb-stat { display: flex; align-items: center; gap: 5px; }
-.sb-r { margin-left: auto; display: flex; gap: 16px; }
-
-/* Notification panel */
-.notif {
-  position: fixed; top: 58px; right: 12px;
-  background: var(--bg-raised); border: 1px solid var(--border-med);
-  border-radius: var(--r-lg); padding: 12px 16px;
-  display: flex; align-items: center; gap: 10px;
-  font-size: 13px; z-index: 9999;
-  animation: fadeUp .3s ease both;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-  min-width: 260px; max-width: 340px;
-  opacity: 0; pointer-events: none; transition: opacity .2s;
-}
-.notif.show { opacity: 1; pointer-events: all; }
-.notif-icon { font-size: 18px; flex-shrink: 0; }
-.notif-body { flex: 1; }
-.notif-title { font-weight: 600; color: var(--t1); font-size: 13px; margin-bottom: 1px; }
-.notif-sub   { font-size: 11px; color: var(--t3); }
-</style>
 </head>
 <body>
 <div class="app">
 
   <!-- TOP BAR -->
   <div class="topbar">
-    <div class="tb-brand"><i class="ti ti-package"></i>PIMS · MTO</div>
+    <div class="tb-brand"><i class="ti ti-package"></i>IPMCS</div>
     <div class="steps">
       <div class="step done"><i class="ti ti-check"></i>Login</div>
       <i class="ti ti-chevron-right step-arrow"></i>
@@ -371,16 +24,17 @@ tbody td:first-child { padding-left: 14px; }
       <i class="ti ti-chevron-right step-arrow"></i>
       <div class="step active"><i class="ti ti-pencil"></i>Manual MTO</div>
       <i class="ti ti-chevron-right step-arrow"></i>
-      <div class="step pending"><i class="ti ti-upload"></i>Model Upload</div>
-      <i class="ti ti-chevron-right step-arrow"></i>
-      <div class="step pending"><i class="ti ti-git-compare"></i>Reconcile</div>
+      <div class="step"><i class="ti ti-upload"></i>Model Upload</div>
     </div>
     <div class="tb-right">
-      <div class="project-pill"><i class="ti ti-briefcase"></i>PDH-PP · GAIL Pata</div>
-      <div class="user-btn" onclick="window.location.href='login.html'">
+      <div class="project-pill" id="projectPillEl"><i class="ti ti-briefcase"></i>—</div>
+      <button class="theme-toggle" title="Toggle light / dark theme">
+        <i class="ti ti-sun"></i>
+      </button>
+      <div class="user-btn" id="logoutBtn">
         <div class="avatar" id="avatarEl">MS</div>
-        <span id="userNameEl">Monojit Sarkar</span>
-        <i class="ti ti-chevron-down" style="font-size:11px"></i>
+        <span id="userNameEl">—</span>
+        <i class="ti ti-logout" style="font-size:12px"></i>
       </div>
     </div>
   </div>
@@ -388,143 +42,468 @@ tbody td:first-child { padding-left: 14px; }
   <!-- MAIN -->
   <div class="main">
 
-    <!-- SIDEBAR: Line list -->
+    <!-- SIDEBAR -->
     <div class="sidebar">
       <div class="sb-head">
-        <div class="sb-head-row">
-          <span class="sb-title">Line List</span>
-          <span class="sb-count" id="lineCount">24 lines</span>
-        </div>
-        <div class="input-wrap" style="margin-bottom:8px">
-          <i class="ti ti-search"></i>
-          <input class="has-icon" type="text" id="lineSearch" placeholder="Search line number…" oninput="filterLines(this.value)"/>
-        </div>
-        <div class="filter-chips">
-          <div class="chip active" onclick="filterChip(this,'all')">All</div>
-          <div class="chip" onclick="filterChip(this,'pending')">Pending</div>
-          <div class="chip cyan" onclick="filterChip(this,'matched')">Matched</div>
-          <div class="chip amber" onclick="filterChip(this,'inprogress')">In Progress</div>
-          <div class="chip red" onclick="filterChip(this,'variance')">Variance</div>
-        </div>
+        <span class="sb-title">Main Sections</span>
       </div>
-
-      <div class="line-list" id="lineList"></div>
-
-      <div class="sb-footer">
-        <button class="btn btn-ghost btn-sm" style="flex:1;justify-content:center" onclick="window.location.href='reconcile.html'">
-          <i class="ti ti-git-compare"></i>Reconcile View
-        </button>
-      </div>
+      <nav class="section-nav" id="sectionNav">
+        <div class="section-item" data-section="summary">
+          <i class="ti ti-table"></i>
+          <span class="section-label">MTO Summary</span>
+          <span class="badge badge-muted" id="summaryCountBadge">0</span>
+        </div>
+        <div class="section-item" data-section="mto">
+          <i class="ti ti-list-check"></i>
+          <span class="section-label">Material Take Off (MTO)</span>
+        </div>
+        <div class="section-item" data-section="upload-ipmcs">
+          <i class="ti ti-file-report"></i>
+          <span class="section-label">Upload Dump from IPMCS</span>
+        </div>
+        <div class="section-item" data-section="upload-model">
+          <i class="ti ti-cube-send"></i>
+          <span class="section-label">Upload Dump from Model</span>
+        </div>
+      </nav>
     </div>
 
     <!-- CONTENT -->
     <div class="content">
-      <div class="workspace" id="workspace">
 
-        <!-- P&ID PANE -->
-        <div class="pid-pane" id="pidPane">
-          <div class="pane-header">
-            <i class="ti ti-topology-star" style="color:var(--blue);font-size:15px"></i>
-            <span class="pane-title" id="pidTitle">P&amp;ID Viewer</span>
-            <div class="pane-actions">
-              <span class="badge badge-blue" id="pidSheetBadge">Select a line</span>
-            </div>
+      <!-- MTO SUMMARY VIEW -->
+      <div class="summary-view" id="summaryView">
+        <div class="pane-header">
+          <i class="ti ti-table" style="color:var(--color-accent-strong);font-size:15px"></i>
+          <span class="pane-title">MTO Summary</span>
+          <span class="badge badge-muted" id="summaryTotalBadge">0 lines</span>
+        </div>
+        <div class="summary-toolbar">
+          <div class="input-wrap" style="max-width:260px">
+            <i class="ti ti-search"></i>
+            <input class="has-icon" type="text" id="summarySearch" placeholder="Search line number…"/>
           </div>
-          <div class="pid-toolbar">
-            <div class="tb-btn" onclick="pidZoom(1.15)" title="Zoom in"><i class="ti ti-zoom-in"></i></div>
-            <div class="tb-btn" onclick="pidZoom(0.87)" title="Zoom out"><i class="ti ti-zoom-out"></i></div>
-            <div class="tb-btn" onclick="pidReset()" title="Reset"><i class="ti ti-maximize"></i></div>
-            <span class="pid-zoom-label" id="zoomLabel">100%</span>
-            <div class="tb-sep"></div>
-            <div class="tb-btn" title="Highlight line"><i class="ti ti-highlight"></i></div>
-            <div class="tb-btn" title="Measure"><i class="ti ti-ruler"></i></div>
-            <div class="tb-btn" title="Layers"><i class="ti ti-layers-subtract"></i></div>
-            <div class="tb-sep"></div>
-            <div class="tb-btn" title="Prev sheet" onclick="prevSheet()"><i class="ti ti-chevron-left"></i></div>
-            <div class="tb-btn" title="Next sheet" onclick="nextSheet()"><i class="ti ti-chevron-right"></i></div>
-          </div>
-          <div class="pid-canvas-wrap">
-            <canvas id="pidCanvas"></canvas>
-            <div class="pid-legend">
-              <div class="legend-row"><div class="legend-line" style="background:#1e90ff"></div><span>Selected line</span></div>
-              <div class="legend-row"><div class="legend-line" style="background:rgba(100,180,255,0.3)"></div><span>Other lines</span></div>
-            </div>
-            <div class="pid-sheet-label" id="sheetLabel">EIL / PDH-PP / P&ID / —</div>
+          <div class="filter-chips">
+            <div class="chip active" data-filter="all">All</div>
+            <div class="chip" data-filter="pending">Pending</div>
+            <div class="chip" data-filter="inprogress">In Progress</div>
+            <div class="chip" data-filter="complete">Complete</div>
           </div>
         </div>
-
-        <!-- MTO ENTRY PANE -->
-        <div class="mto-pane" id="mtoPane">
-          <div class="pane-header">
-            <i class="ti ti-list-check" style="color:var(--cyan);font-size:15px"></i>
-            <span class="pane-title" id="mtoTitle">Manual MTO</span>
-            <div class="pane-actions">
-              <span class="badge badge-muted" id="itemCountBadge">0 items</span>
-            </div>
-          </div>
-          <div class="mto-toolbar">
-            <button class="btn btn-primary btn-sm" onclick="openAddModal()">
-              <i class="ti ti-plus"></i>Add Item
-            </button>
-            <button class="btn btn-ghost btn-sm" onclick="openUploadModal()">
-              <i class="ti ti-upload"></i>Model Dump
-            </button>
-            <div style="flex:1"></div>
-            <button class="btn btn-outline btn-sm" onclick="exportMTO()">
-              <i class="ti ti-download"></i>Export
-            </button>
-            <button class="btn btn-success btn-sm" onclick="goReconcile()">
-              <i class="ti ti-git-compare"></i>Reconcile
-            </button>
-          </div>
-
-          <!-- Empty state -->
-          <div class="empty-state" id="emptyState">
-            <i class="ti ti-clipboard-list empty-icon"></i>
-            <div class="empty-msg">No line selected</div>
-            <div class="empty-sub">Pick a line from the list to start capturing materials</div>
-          </div>
-
-          <!-- Table (hidden until line selected) -->
-          <div class="table-wrap" id="mtoTableWrap" style="display:none">
-            <table id="mtoTable">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Description</th>
-                  <th>Size</th>
-                  <th>Spec</th>
-                  <th>Sch</th>
-                  <th>Unit</th>
-                  <th style="text-align:right">Qty</th>
-                  <th style="text-align:right">Actions</th>
-                </tr>
-              </thead>
-              <tbody id="mtoTbody"></tbody>
-            </table>
-          </div>
-
-          <div class="mto-summary" id="mtoSummary" style="display:none">
-            <div class="sum-item"><span class="dot dot-cyan"></span><span>Items:</span><span class="sum-val" id="sumItems">0</span></div>
-            <div class="sum-item"><i class="ti ti-ruler" style="font-size:12px;color:var(--t3)"></i><span>Pipe:</span><span class="sum-val" id="sumPipe">0 m</span></div>
-            <div class="sum-item"><i class="ti ti-tool" style="font-size:12px;color:var(--t3)"></i><span>Fittings:</span><span class="sum-val" id="sumFit">0</span></div>
-            <div class="sum-item"><i class="ti ti-rotate" style="font-size:12px;color:var(--t3)"></i><span>Valves:</span><span class="sum-val" id="sumValves">0</span></div>
-            <div style="margin-left:auto">
-              <span class="badge badge-amber" id="lastSavedBadge" style="display:none">Unsaved</span>
-              <span class="badge badge-cyan" id="savedBadge" style="display:none">Saved</span>
-            </div>
-          </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th><th>Line No</th><th>Service</th><th>Zone</th><th>Piping Spec</th><th>Size</th>
+                <th>Status</th><th style="text-align:right">Items</th><th style="text-align:right">Action</th>
+              </tr>
+            </thead>
+            <tbody id="summaryTbody"></tbody>
+          </table>
         </div>
       </div>
 
-      <!-- STATUSBAR -->
+      <!-- UPLOAD DUMP FROM IPMCS VIEW -->
+      <div class="summary-view" id="uploadIpmcsView" style="display:none">
+        <div class="pane-header">
+          <i class="ti ti-file-report" style="color:var(--color-accent-strong);font-size:15px"></i>
+          <span class="pane-title">Upload Dump from IPMCS</span>
+        </div>
+        <div class="empty-state">
+          <i class="ti ti-file-report empty-icon"></i>
+          <div class="empty-msg">Upload Dump from IPMCS</div>
+          <div class="empty-sub">Coming soon — upload the error-resolved MTO output report generated by the<br/>
+            company's existing IPMCS system, then verify it line-by-line here with P&amp;ID highlighting.</div>
+        </div>
+      </div>
+
+      <!-- UPLOAD DUMP FROM MODEL VIEW -->
+      <div class="summary-view" id="uploadModelView" style="display:none">
+        <div class="pane-header">
+          <i class="ti ti-cube-send" style="color:var(--color-accent-strong);font-size:15px"></i>
+          <span class="pane-title">Upload Dump from Model</span>
+        </div>
+        <div class="empty-state">
+          <i class="ti ti-cube-send empty-icon"></i>
+          <div class="empty-msg">Upload Dump from Model</div>
+          <div class="empty-sub">Coming soon — upload a direct MTO dump exported from S3D / E3D,<br/>
+            then verify it line-by-line here with P&amp;ID highlighting.</div>
+        </div>
+      </div>
+
+      <!-- MTO ENTRY VIEW -->
+      <div class="workspace-tabs" id="mtoView" style="display:none">
+
+        <!-- TAB BAR -->
+        <div class="tab-bar" id="mtoTabBar">
+          <div class="tab-btn active" data-tab="input"><i class="ti ti-list-check"></i>MTO Input</div>
+          <div class="tab-btn" data-tab="dumpcheck"><i class="ti ti-file-diff"></i>MTO from Dump Check</div>
+          <div class="tab-btn" data-tab="pid"><i class="ti ti-topology-star"></i>P&amp;ID</div>
+          <div class="tab-btn" data-tab="guideline"><i class="ti ti-book"></i>Guideline</div>
+          <div class="tab-btn" data-tab="special"><i class="ti ti-star"></i>Special Item</div>
+        </div>
+
+        <div class="tab-panels">
+
+          <!-- MTO INPUT TAB -->
+          <div class="tab-panel" id="panelInput">
+            <div class="mto-pane">
+              <div class="pane-header">
+                <i class="ti ti-list-check" style="color:var(--color-success);font-size:15px"></i>
+                <span class="pane-title" id="mtoTitle">Manual MTO</span>
+                <span class="badge badge-muted" id="itemCountBadge">0 items</span>
+              </div>
+
+              <!-- LINE INFORMATION & LINE DATA -->
+              <div class="line-info-panel">
+                <div class="li-col">
+                  <div class="li-col-title">Line Information</div>
+                  <div class="li-fields">
+                    <div class="field">
+                      <label class="field-label">Service</label>
+                      <select id="li_service"><option value="">Select…</option></select>
+                    </div>
+                    <div class="field">
+                      <label class="field-label">Unit No</label>
+                      <input type="text" id="li_unitDisplay" class="li-unit-display" disabled/>
+                    </div>
+                    <div class="field">
+                      <label class="field-label">Sequence No</label>
+                      <select id="li_seq" disabled><option value="">Select…</option></select>
+                    </div>
+                    <div class="field">
+                      <label class="field-label">Zone</label>
+                      <select id="li_zone" disabled><option value="">Select…</option></select>
+                    </div>
+                  </div>
+                </div>
+                <div class="li-divider"></div>
+                <div class="li-col">
+                  <div class="li-col-title">Line Data</div>
+                  <div class="ld-fields">
+                    <div class="ld-item"><span class="ld-key">Line No</span><span class="ld-val" id="ld_lineNo">—</span></div>
+                    <div class="ld-item"><span class="ld-key">Piping Spec</span><span class="ld-val" id="ld_pipingSpec">—</span></div>
+                    <div class="ld-item"><span class="ld-key">Size</span><span class="ld-val" id="ld_size">—</span></div>
+                    <div class="ld-item"><span class="ld-key">Source</span><span class="ld-val" id="ld_source">—</span></div>
+                    <div class="ld-item"><span class="ld-key">Created By</span><span class="ld-val" id="ld_createdBy">—</span></div>
+                    <div class="ld-item"><span class="ld-key">Created At</span><span class="ld-val" id="ld_createdAt">—</span></div>
+                    <div class="ld-item"><span class="ld-key">Operating Pressure</span><span class="ld-val" id="ld_opPressure">—</span></div>
+                    <div class="ld-item"><span class="ld-key">Operating Temperature</span><span class="ld-val" id="ld_opTemp">—</span></div>
+                    <div class="ld-item"><span class="ld-key">Design Pressure</span><span class="ld-val" id="ld_designPressure">—</span></div>
+                    <div class="ld-item"><span class="ld-key">Design Temperature</span><span class="ld-val" id="ld_designTemp">—</span></div>
+                    <div class="ld-item"><span class="ld-key">Insulation Type</span><span class="ld-val" id="ld_insulationType">—</span></div>
+                    <div class="ld-item"><span class="ld-key">Insulation Thickness</span><span class="ld-val" id="ld_insulationThickness">—</span></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- LINE SUMMARY: Data Entry vs SP P&ID mismatch -->
+              <div class="line-summary-panel">
+                <div class="ls-title">Line Summary</div>
+                <div class="ls-stats">
+                  <div class="ls-stat"><span class="dot dot-success"></span>Matched<span class="ls-val" id="lsMatched">0</span></div>
+                  <div class="ls-stat"><span class="dot dot-warning"></span>Qty Mismatch<span class="ls-val" id="lsMismatch">0</span></div>
+                  <div class="ls-stat"><span class="dot dot-accent"></span>Manual Only<span class="ls-val" id="lsManualOnly">0</span></div>
+                  <div class="ls-stat"><span class="dot dot-danger"></span>Extracted Only<span class="ls-val" id="lsExtractedOnly">0</span></div>
+                </div>
+              </div>
+
+              <!-- DATA ENTRY (left) | MTO EXTRACTED FROM SP P&ID (right) -->
+              <div class="entry-split">
+
+                <div class="entry-col">
+                  <div class="col-head"><i class="ti ti-edit"></i><span>Data Entry</span></div>
+                  <div class="mto-toolbar">
+                    <button class="btn btn-primary btn-sm" id="addItemBtn"><i class="ti ti-plus"></i>Add Item</button>
+                    <button class="btn btn-ghost btn-sm" id="uploadBtn"><i class="ti ti-upload"></i>Model Dump</button>
+                    <button class="btn btn-ghost btn-sm" id="openPidBtn"><i class="ti ti-highlight"></i>Open &amp; Highlight P&amp;ID</button>
+                    <div style="flex:1"></div>
+                    <button class="btn btn-outline btn-sm" id="exportBtn"><i class="ti ti-download"></i>Export</button>
+                    <button class="btn btn-success btn-sm" id="saveBtn"><i class="ti ti-device-floppy"></i>Save MTO</button>
+                  </div>
+
+                  <div class="empty-state" id="emptyState">
+                    <i class="ti ti-clipboard-list empty-icon"></i>
+                    <div class="empty-msg">No line selected</div>
+                    <div class="empty-sub">Choose Service, Sequence No and Zone above to load a line</div>
+                  </div>
+
+                  <div class="table-wrap" id="mtoTableWrap" style="display:none">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>#</th><th>Description</th><th>Size</th><th>Spec</th><th>Sch</th><th>Unit</th>
+                          <th style="text-align:right">Qty</th><th style="text-align:right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody id="mtoTbody"></tbody>
+                    </table>
+                  </div>
+
+                  <div class="mto-summary" id="mtoSummary" style="display:none">
+                    <div class="sum-item"><span class="dot dot-success"></span><span>Items:</span><span class="sum-val" id="sumItems">0</span></div>
+                    <div class="sum-item"><i class="ti ti-ruler" style="font-size:12px;color:var(--text-secondary)"></i><span>Pipe:</span><span class="sum-val" id="sumPipe">0 m</span></div>
+                    <div class="sum-item"><i class="ti ti-tool" style="font-size:12px;color:var(--text-secondary)"></i><span>Fittings:</span><span class="sum-val" id="sumFit">0</span></div>
+                    <div class="sum-item"><i class="ti ti-rotate" style="font-size:12px;color:var(--text-secondary)"></i><span>Valves:</span><span class="sum-val" id="sumValves">0</span></div>
+                    <div style="margin-left:auto">
+                      <span class="badge badge-warning" id="unsavedBadge" style="display:none">Unsaved</span>
+                      <span class="badge badge-success" id="savedBadge" style="display:none">Saved</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="extracted-col">
+                  <div class="col-head"><i class="ti ti-topology-star"></i><span>MTO Extracted from SP P&amp;ID</span><span class="badge badge-muted" id="extractedCountBadge">0 items</span></div>
+
+                  <div class="empty-state" id="extractedEmptyState">
+                    <i class="ti ti-topology-star empty-icon"></i>
+                    <div class="empty-msg">No extraction available</div>
+                    <div class="empty-sub">Select a line to view its Smart P&amp;ID extracted quantities</div>
+                  </div>
+
+                  <div class="table-wrap" id="extractedTableWrap" style="display:none">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>#</th><th>Description</th><th>Size</th><th>Spec</th><th>Sch</th><th>Unit</th>
+                          <th style="text-align:right">Qty</th>
+                        </tr>
+                      </thead>
+                      <tbody id="extractedTbody"></tbody>
+                    </table>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+          <!-- MTO FROM DUMP CHECK TAB -->
+          <div class="tab-panel" id="panelDumpCheck" style="display:none">
+            <div class="mto-pane">
+              <div class="pane-header">
+                <i class="ti ti-file-diff" style="color:var(--color-success);font-size:15px"></i>
+                <span class="pane-title" id="dc_mtoTitle">MTO from Dump Check</span>
+                <span class="badge badge-muted" id="dc_itemCountBadge">0 items</span>
+              </div>
+
+              <!-- LINE INFORMATION & LINE DATA -->
+              <div class="line-info-panel">
+                <div class="li-col">
+                  <div class="li-col-title">Line Information</div>
+                  <div class="li-fields">
+                    <div class="field">
+                      <label class="field-label">Service</label>
+                      <select id="dc_li_service"><option value="">Select…</option></select>
+                    </div>
+                    <div class="field">
+                      <label class="field-label">Unit No</label>
+                      <input type="text" id="dc_li_unitDisplay" class="li-unit-display" disabled/>
+                    </div>
+                    <div class="field">
+                      <label class="field-label">Sequence No</label>
+                      <select id="dc_li_seq" disabled><option value="">Select…</option></select>
+                    </div>
+                    <div class="field">
+                      <label class="field-label">Zone</label>
+                      <select id="dc_li_zone" disabled><option value="">Select…</option></select>
+                    </div>
+                  </div>
+                </div>
+                <div class="li-divider"></div>
+                <div class="li-col">
+                  <div class="li-col-title">Line Data</div>
+                  <div class="ld-fields">
+                    <div class="ld-item"><span class="ld-key">Line No</span><span class="ld-val" id="dc_ld_lineNo">—</span></div>
+                    <div class="ld-item"><span class="ld-key">Piping Spec</span><span class="ld-val" id="dc_ld_pipingSpec">—</span></div>
+                    <div class="ld-item"><span class="ld-key">Size</span><span class="ld-val" id="dc_ld_size">—</span></div>
+                    <div class="ld-item"><span class="ld-key">Source</span><span class="ld-val" id="dc_ld_source">—</span></div>
+                    <div class="ld-item"><span class="ld-key">Created By</span><span class="ld-val" id="dc_ld_createdBy">—</span></div>
+                    <div class="ld-item"><span class="ld-key">Created At</span><span class="ld-val" id="dc_ld_createdAt">—</span></div>
+                    <div class="ld-item"><span class="ld-key">Operating Pressure</span><span class="ld-val" id="dc_ld_opPressure">—</span></div>
+                    <div class="ld-item"><span class="ld-key">Operating Temperature</span><span class="ld-val" id="dc_ld_opTemp">—</span></div>
+                    <div class="ld-item"><span class="ld-key">Design Pressure</span><span class="ld-val" id="dc_ld_designPressure">—</span></div>
+                    <div class="ld-item"><span class="ld-key">Design Temperature</span><span class="ld-val" id="dc_ld_designTemp">—</span></div>
+                    <div class="ld-item"><span class="ld-key">Insulation Type</span><span class="ld-val" id="dc_ld_insulationType">—</span></div>
+                    <div class="ld-item"><span class="ld-key">Insulation Thickness</span><span class="ld-val" id="dc_ld_insulationThickness">—</span></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- LINE SUMMARY: Dump Items vs SP P&ID mismatch -->
+              <div class="line-summary-panel">
+                <div class="ls-title">Line Summary</div>
+                <div class="ls-stats">
+                  <div class="ls-stat"><span class="dot dot-success"></span>Matched<span class="ls-val" id="dc_lsMatched">0</span></div>
+                  <div class="ls-stat"><span class="dot dot-warning"></span>Qty Mismatch<span class="ls-val" id="dc_lsMismatch">0</span></div>
+                  <div class="ls-stat"><span class="dot dot-accent"></span>Dump Only<span class="ls-val" id="dc_lsManualOnly">0</span></div>
+                  <div class="ls-stat"><span class="dot dot-danger"></span>Extracted Only<span class="ls-val" id="dc_lsExtractedOnly">0</span></div>
+                </div>
+              </div>
+
+              <!-- DUMP ITEMS (left) | MTO EXTRACTED FROM SP P&ID (right) -->
+              <div class="entry-split">
+
+                <div class="entry-col">
+                  <div class="col-head"><i class="ti ti-file-diff"></i><span>Dump Items</span></div>
+                  <div class="mto-toolbar">
+                    <button class="btn btn-primary btn-sm" id="dc_addItemBtn"><i class="ti ti-plus"></i>Add Item</button>
+                    <button class="btn btn-ghost btn-sm" id="dc_uploadBtn"><i class="ti ti-upload"></i>Model Dump</button>
+                    <button class="btn btn-ghost btn-sm" id="dc_openPidBtn"><i class="ti ti-highlight"></i>Open &amp; Highlight P&amp;ID</button>
+                    <div style="flex:1"></div>
+                    <button class="btn btn-outline btn-sm" id="dc_exportBtn"><i class="ti ti-download"></i>Export</button>
+                    <button class="btn btn-success btn-sm" id="dc_saveBtn"><i class="ti ti-device-floppy"></i>Save</button>
+                  </div>
+
+                  <div class="empty-state" id="dc_emptyState">
+                    <i class="ti ti-clipboard-list empty-icon"></i>
+                    <div class="empty-msg">No line selected</div>
+                    <div class="empty-sub">Choose Service, Sequence No and Zone above to load a line</div>
+                  </div>
+
+                  <div class="table-wrap" id="dc_mtoTableWrap" style="display:none">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>#</th><th>Description</th><th>Size</th><th>Spec</th><th>Sch</th><th>Unit</th>
+                          <th style="text-align:right">Qty</th><th style="text-align:right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody id="dc_mtoTbody"></tbody>
+                    </table>
+                  </div>
+
+                  <div class="mto-summary" id="dc_mtoSummary" style="display:none">
+                    <div class="sum-item"><span class="dot dot-success"></span><span>Items:</span><span class="sum-val" id="dc_sumItems">0</span></div>
+                    <div class="sum-item"><i class="ti ti-ruler" style="font-size:12px;color:var(--text-secondary)"></i><span>Pipe:</span><span class="sum-val" id="dc_sumPipe">0 m</span></div>
+                    <div class="sum-item"><i class="ti ti-tool" style="font-size:12px;color:var(--text-secondary)"></i><span>Fittings:</span><span class="sum-val" id="dc_sumFit">0</span></div>
+                    <div class="sum-item"><i class="ti ti-rotate" style="font-size:12px;color:var(--text-secondary)"></i><span>Valves:</span><span class="sum-val" id="dc_sumValves">0</span></div>
+                    <div style="margin-left:auto">
+                      <span class="badge badge-warning" id="dc_unsavedBadge" style="display:none">Unsaved</span>
+                      <span class="badge badge-success" id="dc_savedBadge" style="display:none">Saved</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="extracted-col">
+                  <div class="col-head"><i class="ti ti-topology-star"></i><span>MTO Extracted from SP P&amp;ID</span><span class="badge badge-muted" id="dc_extractedCountBadge">0 items</span></div>
+
+                  <div class="empty-state" id="dc_extractedEmptyState">
+                    <i class="ti ti-topology-star empty-icon"></i>
+                    <div class="empty-msg">No extraction available</div>
+                    <div class="empty-sub">Select a line to view its Smart P&amp;ID extracted quantities</div>
+                  </div>
+
+                  <div class="table-wrap" id="dc_extractedTableWrap" style="display:none">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>#</th><th>Description</th><th>Size</th><th>Spec</th><th>Sch</th><th>Unit</th>
+                          <th style="text-align:right">Qty</th>
+                        </tr>
+                      </thead>
+                      <tbody id="dc_extractedTbody"></tbody>
+                    </table>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+          <!-- P&ID TAB: folders -> documents -> multi-user highlight status -->
+          <div class="tab-panel" id="panelPid" style="display:none">
+            <div class="pid-lib">
+
+              <!-- FOLDER LIST -->
+              <div class="pid-lib-view" id="pidFoldersView">
+                <div class="pane-header">
+                  <i class="ti ti-topology-star" style="color:var(--color-accent-strong);font-size:15px"></i>
+                  <span class="pane-title">P&amp;ID Library</span>
+                  <span class="badge badge-muted" id="pidFolderCountBadge">0 folders</span>
+                  <button class="btn btn-primary btn-sm" id="pidNewFolderBtn" style="display:none">
+                    <i class="ti ti-folder-plus"></i>New Folder
+                  </button>
+                </div>
+                <div class="pid-card-grid" id="pidFolderGrid"></div>
+              </div>
+
+              <!-- DOCUMENT INDEX -->
+              <div class="pid-lib-view" id="pidDocumentsView" style="display:none">
+                <div class="pane-header">
+                  <div class="tool-btn" id="pidBackToFoldersBtn" title="Back to folders"><i class="ti ti-arrow-left"></i></div>
+                  <span class="pane-title" id="pidFolderTitle">Folder</span>
+                  <span class="badge badge-muted" id="pidDocCountBadge">0 P&amp;IDs</span>
+                  <button class="btn btn-primary btn-sm" id="pidSelectBtn" style="display:none">
+                    <i class="ti ti-list-check"></i>Select P&amp;IDs
+                  </button>
+                </div>
+                <div class="pid-card-grid" id="pidDocGrid"></div>
+              </div>
+
+              <!-- MULTI-USER HIGHLIGHT STATUS VIEWER (read-only) -->
+              <div class="pid-lib-view" id="pidStatusView" style="display:none">
+                <div class="pane-header">
+                  <div class="tool-btn" id="pidBackToDocsBtn" title="Back to P&amp;ID index"><i class="ti ti-arrow-left"></i></div>
+                  <span class="pane-title" id="pidDocTitle">Document</span>
+                  <button class="btn btn-ghost btn-sm" id="pidRefreshBtn"><i class="ti ti-refresh"></i>Refresh</button>
+                </div>
+                <div class="pdf-toolbar">
+                  <div class="tool-btn" id="pidZoomOutBtn" title="Zoom out"><i class="ti ti-zoom-out"></i></div>
+                  <span class="zoom-label" id="pidZoomLabel">100%</span>
+                  <div class="tool-btn" id="pidZoomInBtn" title="Zoom in"><i class="ti ti-zoom-in"></i></div>
+                  <div class="tool-btn" id="pidZoomResetBtn" title="Reset zoom"><i class="ti ti-maximize"></i></div>
+                  <div class="tool-sep"></div>
+                  <div class="tool-btn" id="pidPrevPageBtn" title="Previous page"><i class="ti ti-chevron-left"></i></div>
+                  <span class="zoom-label" id="pidPageLabel">Page 1 / 1</span>
+                  <div class="tool-btn" id="pidNextPageBtn" title="Next page"><i class="ti ti-chevron-right"></i></div>
+                  <div style="flex:1"></div>
+                  <div class="pid-user-legend" id="pidUserLegend"></div>
+                </div>
+                <div class="pdf-scroll-wrap">
+                  <div class="pdf-page-stack">
+                    <canvas id="pidStatusPdfCanvas"></canvas>
+                    <canvas id="pidStatusOverlayCanvas"></canvas>
+                  </div>
+                  <div class="pdf-loading" id="pidStatusLoading">
+                    <i class="ti ti-loader-2 pdf-spin"></i>
+                    <span>Loading P&amp;ID…</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- GUIDELINE TAB -->
+          <div class="tab-panel" id="panelGuideline" style="display:none">
+            <div class="empty-state">
+              <i class="ti ti-book empty-icon"></i>
+              <div class="empty-msg">Guideline</div>
+              <div class="empty-sub">Coming soon — piping MTO takeoff guidelines and standards reference.</div>
+            </div>
+          </div>
+
+          <!-- SPECIAL ITEM TAB -->
+          <div class="tab-panel" id="panelSpecial" style="display:none">
+            <div class="empty-state">
+              <i class="ti ti-star empty-icon"></i>
+              <div class="empty-msg">Special Item</div>
+              <div class="empty-sub">Coming soon — capture non-standard / special items outside the regular MTO categories.</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- STATUS BAR -->
       <div class="statusbar">
-        <div class="sb-stat"><span class="dot dot-cyan" style="width:5px;height:5px"></span>System Online</div>
-        <div class="sb-stat"><i class="ti ti-database" style="font-size:10px"></i>PIMS_DEV · PostgreSQL</div>
+        <div class="sb-stat"><span class="dot dot-success" style="width:5px;height:5px"></span>System Online</div>
+        <div class="sb-stat"><i class="ti ti-database" style="font-size:10px"></i>Mock data · no backend yet</div>
         <div class="sb-stat" id="selectedLineStat">No line selected</div>
         <div class="sb-r">
-          <span id="roleStatEl">Role: JE</span>
-          <span>PDH-PP · Rev B</span>
+          <span id="roleStatEl">Role: —</span>
+          <span id="jobUnitStatEl">—</span>
           <span id="timeStat"></span>
         </div>
       </div>
@@ -536,54 +515,51 @@ tbody td:first-child { padding-left: 14px; }
 <div class="modal-overlay" id="addModal">
   <div class="modal">
     <div class="modal-header">
-      <i class="ti ti-package" style="font-size:18px;color:var(--blue)"></i>
+      <i class="ti ti-package" style="font-size:18px;color:var(--color-accent-strong)"></i>
       <div class="modal-title">Add MTO Item</div>
-      <div class="modal-close" onclick="closeAddModal()"><i class="ti ti-x"></i></div>
+      <div class="modal-close" id="closeAddModal"><i class="ti ti-x"></i></div>
     </div>
     <div class="modal-body">
-      <!-- Category picker -->
       <div style="margin-bottom:14px">
-        <div class="form-col" style="margin-bottom:8px"><label>Category</label></div>
+        <label class="field-label" style="display:block;margin-bottom:8px">Category</label>
         <div class="cat-grid" id="catGrid">
-          <div class="cat-btn active" onclick="selectCat(this,'Pipe')">Pipe</div>
-          <div class="cat-btn" onclick="selectCat(this,'Elbow')">Elbow</div>
-          <div class="cat-btn" onclick="selectCat(this,'Tee')">Tee</div>
-          <div class="cat-btn" onclick="selectCat(this,'Reducer')">Reducer</div>
-          <div class="cat-btn" onclick="selectCat(this,'Flange')">Flange</div>
-          <div class="cat-btn" onclick="selectCat(this,'Valve')">Valve</div>
-          <div class="cat-btn" onclick="selectCat(this,'Gasket')">Gasket</div>
-          <div class="cat-btn" onclick="selectCat(this,'Stud Bolt')">Stud Bolt</div>
-          <div class="cat-btn" onclick="selectCat(this,'Cap')">Cap</div>
-          <div class="cat-btn" onclick="selectCat(this,'Other')">Other</div>
+          <div class="cat-btn active" data-cat="Pipe">Pipe</div>
+          <div class="cat-btn" data-cat="Elbow">Elbow</div>
+          <div class="cat-btn" data-cat="Tee">Tee</div>
+          <div class="cat-btn" data-cat="Reducer">Reducer</div>
+          <div class="cat-btn" data-cat="Flange">Flange</div>
+          <div class="cat-btn" data-cat="Valve">Valve</div>
+          <div class="cat-btn" data-cat="Gasket">Gasket</div>
+          <div class="cat-btn" data-cat="Stud Bolt">Stud Bolt</div>
+          <div class="cat-btn" data-cat="Cap">Cap</div>
+          <div class="cat-btn" data-cat="Other">Other</div>
         </div>
       </div>
-
       <div class="form-row">
-        <div class="form-col" style="grid-column:1/-1">
-          <label>Full Description</label>
+        <div class="field" style="grid-column:1/-1">
+          <label class="field-label">Full Description</label>
           <input type="text" id="mi_desc" placeholder="e.g. CS BW Elbow 90° LR"/>
         </div>
       </div>
       <div class="form-row triple">
-        <div class="form-col">
-          <label>Size (NB)</label>
+        <div class="field">
+          <label class="field-label">Size (NB)</label>
           <select id="mi_size">
-            <option>½"</option><option>¾"</option><option>1"</option>
-            <option>1½"</option><option>2"</option><option>3"</option>
-            <option>4"</option><option>6"</option><option>8"</option>
-            <option>10"</option><option>12"</option><option>16"</option>
+            <option>½"</option><option>¾"</option><option>1"</option><option>1½"</option>
+            <option>2"</option><option>3"</option><option>4"</option><option>6"</option>
+            <option>8"</option><option>10"</option><option>12"</option><option>16"</option>
             <option>18"</option><option>20"</option><option>24"</option>
           </select>
         </div>
-        <div class="form-col">
-          <label>Pipe Spec</label>
+        <div class="field">
+          <label class="field-label">Pipe Spec</label>
           <select id="mi_spec">
             <option>A1A</option><option>A1B</option><option>A3A</option>
             <option>B1A</option><option>B2A</option><option>C1A</option>
           </select>
         </div>
-        <div class="form-col">
-          <label>Schedule</label>
+        <div class="field">
+          <label class="field-label">Schedule</label>
           <select id="mi_sch">
             <option>STD</option><option>XS</option><option>XXS</option>
             <option>SCH-40</option><option>SCH-80</option><option>SCH-160</option>
@@ -591,29 +567,25 @@ tbody td:first-child { padding-left: 14px; }
         </div>
       </div>
       <div class="form-row">
-        <div class="form-col">
-          <label>Quantity</label>
+        <div class="field">
+          <label class="field-label">Quantity</label>
           <input type="text" id="mi_qty" placeholder="e.g. 4"/>
         </div>
-        <div class="form-col">
-          <label>Unit</label>
-          <select id="mi_unit">
-            <option>NOS</option><option>m</option><option>sets</option><option>kg</option>
-          </select>
+        <div class="field">
+          <label class="field-label">Unit</label>
+          <select id="mi_unit"><option>NOS</option><option>m</option><option>sets</option><option>kg</option></select>
         </div>
       </div>
       <div class="form-row">
-        <div class="form-col" style="grid-column:1/-1">
-          <label>Remarks (optional)</label>
+        <div class="field" style="grid-column:1/-1">
+          <label class="field-label">Remarks (optional)</label>
           <input type="text" id="mi_rem" placeholder="e.g. Near nozzle N1, verify in ISO"/>
         </div>
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeAddModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="saveItem()">
-        <i class="ti ti-check"></i>Add to MTO
-      </button>
+      <button class="btn btn-ghost" id="cancelAddModal">Cancel</button>
+      <button class="btn btn-primary" id="saveItemBtn"><i class="ti ti-check"></i>Add to MTO</button>
     </div>
   </div>
 </div>
@@ -622,568 +594,126 @@ tbody td:first-child { padding-left: 14px; }
 <div class="modal-overlay" id="uploadModal">
   <div class="modal">
     <div class="modal-header">
-      <i class="ti ti-upload" style="font-size:18px;color:var(--amber)"></i>
+      <i class="ti ti-upload" style="font-size:18px;color:var(--color-warning)"></i>
       <div class="modal-title">Upload Model MTO Dump</div>
-      <div class="modal-close" onclick="closeUploadModal()"><i class="ti ti-x"></i></div>
+      <div class="modal-close" id="closeUploadModal"><i class="ti ti-x"></i></div>
     </div>
     <div class="modal-body">
-      <div id="dropZone" style="
-        border: 2px dashed var(--border-soft); border-radius: var(--r-lg);
-        padding: 40px 20px; text-align: center; cursor: pointer;
-        transition: all .2s; background: var(--bg-raised);
-      " onclick="document.getElementById('fileInput').click()"
-         ondragover="event.preventDefault();this.style.borderColor='var(--blue)'"
-         ondragleave="this.style.borderColor='var(--border-soft)'">
-        <i class="ti ti-cloud-upload" style="font-size:40px;color:var(--t4);display:block;margin-bottom:10px"></i>
-        <div style="font-size:14px;color:var(--t2);margin-bottom:5px">Drop CSV or Excel file here</div>
-        <div style="font-size:11px;color:var(--t4)">or click to browse · Supports .csv, .xlsx, .xls</div>
+      <div id="dropZone">
+        <i class="ti ti-cloud-upload" style="font-size:40px;color:var(--text-faint);display:block;margin-bottom:10px"></i>
+        <div style="font-size:14px;color:var(--text-secondary);margin-bottom:5px">Drop CSV or Excel file here</div>
+        <div style="font-size:11px;color:var(--text-faint)">or click to browse · Supports .csv, .xlsx, .xls</div>
       </div>
-      <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" style="display:none" onchange="handleFile(this)"/>
+      <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" style="display:none"/>
       <div id="filePreview" style="display:none;margin-top:14px">
-        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg-raised);border:1px solid var(--border-soft);border-radius:var(--r-md)">
-          <i class="ti ti-file-spreadsheet" style="font-size:20px;color:var(--cyan)"></i>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--color-surface-raised);border:1px solid var(--color-border-strong);border-radius:var(--radius-md)">
+          <i class="ti ti-file-spreadsheet" style="font-size:20px;color:var(--color-success)"></i>
           <div style="flex:1">
-            <div id="fileName" style="font-size:13px;color:var(--t1);font-weight:500"></div>
-            <div id="fileInfo" style="font-size:11px;color:var(--t3)"></div>
+            <div id="fileName" style="font-size:13px;color:var(--text-primary);font-weight:500"></div>
+            <div id="fileInfo" style="font-size:11px;color:var(--text-secondary)"></div>
           </div>
-          <i class="ti ti-check-circle" style="color:var(--cyan);font-size:18px"></i>
+          <i class="ti ti-check-circle" style="color:var(--color-success);font-size:18px"></i>
         </div>
       </div>
-      <div style="margin-top:14px;padding:10px 12px;background:var(--amber-dim);border:1px solid rgba(245,166,35,.2);border-radius:var(--r-md)">
-        <div style="font-size:11px;color:var(--amber);display:flex;align-items:flex-start;gap:7px">
+      <div style="margin-top:14px;padding:10px 12px;background:var(--color-warning-soft);border:1px solid rgba(232,163,61,.25);border-radius:var(--radius-md)">
+        <div style="font-size:11px;color:var(--color-warning);display:flex;align-items:flex-start;gap:7px">
           <i class="ti ti-info-circle" style="flex-shrink:0;margin-top:1px"></i>
-          <span>Columns expected: <b>ITEM_CODE, DESCRIPTION, SIZE, SPEC, SCHEDULE, QTY, UNIT</b>. System will auto-map common Smart3D / PDMS exports.</span>
+          <span>Columns expected: <b>ITEM_CODE, DESCRIPTION, SIZE, SPEC, SCHEDULE, QTY, UNIT</b>. This is a placeholder — parsing runs once the backend is wired up.</span>
         </div>
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeUploadModal()">Cancel</button>
-      <button class="btn btn-primary" id="uploadBtn" onclick="processUpload()">
-        <i class="ti ti-upload"></i>Upload &amp; Parse
-      </button>
+      <button class="btn btn-ghost" id="cancelUploadModal">Cancel</button>
+      <button class="btn btn-primary" id="processUploadBtn"><i class="ti ti-upload"></i>Upload &amp; Parse</button>
     </div>
   </div>
 </div>
 
-<!-- NOTIFICATION -->
-<div class="notif" id="notif">
-  <span class="notif-icon" id="notifIcon"></span>
-  <div class="notif-body">
-    <div class="notif-title" id="notifTitle"></div>
-    <div class="notif-sub"   id="notifSub"></div>
+<!-- NEW P&ID FOLDER MODAL (ADMIN) -->
+<div class="modal-overlay" id="pidFolderModal">
+  <div class="modal">
+    <div class="modal-header">
+      <i class="ti ti-folder-plus" style="font-size:18px;color:var(--color-accent-strong)"></i>
+      <div class="modal-title">New P&amp;ID Folder</div>
+      <div class="modal-close" id="closePidFolderModal"><i class="ti ti-x"></i></div>
+    </div>
+    <form id="pidFolderForm">
+      <div class="modal-body">
+        <div class="field">
+          <label class="field-label">Folder Name</label>
+          <input type="text" id="pidFolderNameInput" placeholder="e.g. MTO-2" required/>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" id="cancelPidFolderModal">Cancel</button>
+        <button type="submit" class="btn btn-primary"><i class="ti ti-check"></i>Create Folder</button>
+      </div>
+    </form>
   </div>
 </div>
 
-<script>
-/* ══════════════════════════════════════
-   DATA LAYER (mock — replace with fetch)
-══════════════════════════════════════ */
-const LINES = [
-  { id:1, tag:'6"-P-1001-A1A',  fluid:'CS',   rating:'150#', desc:'From V-101 to P-101A',    sheet:'P-101', status:'pending',    items:0  },
-  { id:2, tag:'8"-P-1002-A1A',  fluid:'CS',   rating:'300#', desc:'Pump discharge P-101A/B', sheet:'P-101', status:'inprogress', items:7  },
-  { id:3, tag:'4"-P-1003-A3A',  fluid:'SS316',rating:'150#', desc:'Utility loop East',       sheet:'P-102', status:'matched',    items:12 },
-  { id:4, tag:'10"-P-1010-A1B', fluid:'CS',   rating:'600#', desc:'Flare header North',      sheet:'P-103', status:'pending',    items:0  },
-  { id:5, tag:'3"-I-2001-A3A',  fluid:'CS',   rating:'150#', desc:'Instrument air ring',     sheet:'P-201', status:'variance',   items:8  },
-  { id:6, tag:'2"-U-3001-B2A',  fluid:'CS',   rating:'150#', desc:'Drain to CBD',            sheet:'P-301', status:'matched',    items:5  },
-  { id:7, tag:'6"-P-1007-A1A',  fluid:'CS',   rating:'300#', desc:'Column feed C-101',       sheet:'P-101', status:'pending',    items:0  },
-  { id:8, tag:'12"-P-2001-A1A', fluid:'CS',   rating:'600#', desc:'Main header South',       sheet:'P-104', status:'pending',    items:0  },
-  { id:9, tag:'1½"-I-3010-A3A', fluid:'SS316',rating:'150#', desc:'Sample connection',       sheet:'P-201', status:'pending',    items:0  },
-];
-
-const STATUS_BADGE = {
-  pending:    '<span class="badge badge-muted">Pending</span>',
-  inprogress: '<span class="badge badge-blue">In Progress</span>',
-  matched:    '<span class="badge badge-cyan">Matched</span>',
-  variance:   '<span class="badge badge-red">Variance</span>',
-};
-
-/* Mock MTO data per line */
-const MTO_DATA = {
-  2: [
-    { id:1, cat:'Pipe',    desc:'CS ERW Pipe SCH-40',        size:'8"',   spec:'A1A', sch:'SCH-40', unit:'m',   qty:38, rem:'' },
-    { id:2, cat:'Elbow',   desc:'CS BW Elbow 90° LR',        size:'8"',   spec:'A1A', sch:'STD',    unit:'NOS', qty:4,  rem:'' },
-    { id:3, cat:'Valve',   desc:'CS Gate Valve FF',           size:'8"',   spec:'A1A', sch:'—',      unit:'NOS', qty:2,  rem:'Check with client' },
-    { id:4, cat:'Tee',     desc:'CS BW Tee Equal',            size:'8"',   spec:'A1A', sch:'STD',    unit:'NOS', qty:1,  rem:'' },
-    { id:5, cat:'Reducer', desc:'CS BW Eccentric Reducer',    size:'8"×6"',spec:'A1A', sch:'STD',    unit:'NOS', qty:2,  rem:'' },
-    { id:6, cat:'Flange',  desc:'CS WN Flange RF 300#',       size:'8"',   spec:'A1A', sch:'—',      unit:'NOS', qty:4,  rem:'' },
-    { id:7, cat:'Gasket',  desc:'Spiral Wound Gasket SS+Gr.', size:'8"',   spec:'A1A', sch:'—',      unit:'NOS', qty:12, rem:'' },
-  ],
-  3: [
-    { id:1, cat:'Pipe',  desc:'SS316L Seamless Pipe',     size:'4"', spec:'A3A', sch:'SCH-40', unit:'m',   qty:22, rem:'' },
-    { id:2, cat:'Elbow', desc:'SS316L BW Elbow 45° SR',   size:'4"', spec:'A3A', sch:'STD',   unit:'NOS', qty:6,  rem:'' },
-    { id:3, cat:'Valve', desc:'SS Gate Valve Handwheel',  size:'4"', spec:'A3A', sch:'—',     unit:'NOS', qty:3,  rem:'' },
-  ],
-  5: [
-    { id:1, cat:'Pipe',  desc:'CS Seamless Pipe',         size:'3"', spec:'A3A', sch:'SCH-40', unit:'m',   qty:45, rem:'' },
-    { id:2, cat:'Elbow', desc:'CS BW Elbow 90° LR',       size:'3"', spec:'A3A', sch:'STD',   unit:'NOS', qty:8,  rem:'' },
-    { id:3, cat:'Valve', desc:'CS Globe Valve',            size:'3"', spec:'A3A', sch:'—',     unit:'NOS', qty:2,  rem:'' },
-  ],
-};
-
-let activeLine = null;
-let activeFilter = 'all';
-let mtoItems = [];
-let nextId = 100;
-let selectedCat = 'Pipe';
-let pidZoomLevel = 1;
-let pidOffsetX = 0, pidOffsetY = 0;
-let pidDragging = false, pidDragX = 0, pidDragY = 0;
-
-/* ══════════════════════════════════════
-   INIT
-══════════════════════════════════════ */
-window.addEventListener('DOMContentLoaded', () => {
-  const u = JSON.parse(sessionStorage.getItem('mto_user') || '{"name":"Monojit Sarkar","role":"JE","emp":"EIL-04821"}');
-  const initials = u.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
-  document.getElementById('avatarEl').textContent = initials;
-  document.getElementById('userNameEl').textContent = u.name;
-  document.getElementById('roleStatEl').textContent = 'Role: ' + u.role;
-
-  renderLineList(LINES);
-  setInterval(updateClock, 1000);
-  updateClock();
-  initPid();
-});
-
-function updateClock() {
-  const now = new Date();
-  document.getElementById('timeStat').textContent =
-    now.toLocaleTimeString('en-IN', { hour12:false, hour:'2-digit', minute:'2-digit' });
-}
-
-/* ══════════════════════════════════════
-   LINE LIST
-══════════════════════════════════════ */
-function renderLineList(lines) {
-  const el = document.getElementById('lineList');
-  if (!lines.length) {
-    el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--t4);font-size:12px">No lines found</div>';
-    return;
-  }
-  el.innerHTML = lines.map(l => `
-    <div class="line-item ${l.status==='matched'?'matched':''} ${l.status==='variance'?'variance':''} ${activeLine===l.id?'active':''}"
-         onclick="selectLine(${l.id})" data-status="${l.status}">
-      <div class="li-header">
-        <span class="li-tag">${l.tag}</span>
-        ${STATUS_BADGE[l.status]}
-      </div>
-      <div class="li-meta">${l.fluid} · ${l.rating} · ${l.desc}</div>
-      <div class="li-footer">
-        <span class="li-items">Sheet ${l.sheet} · ${l.items} items</span>
-        <span class="badge badge-muted">${l.fluid}</span>
-      </div>
+<!-- SELECT P&IDs FROM PIMS MODAL (ADMIN) -->
+<div class="modal-overlay" id="pidSelectDocModal">
+  <div class="modal">
+    <div class="modal-header">
+      <i class="ti ti-list-check" style="font-size:18px;color:var(--color-warning)"></i>
+      <div class="modal-title">Select P&amp;IDs</div>
+      <div class="modal-close" id="closePidSelectModal"><i class="ti ti-x"></i></div>
     </div>
-  `).join('');
-  document.getElementById('lineCount').textContent = lines.length + ' lines';
-}
+    <div class="modal-body">
+      <div style="font-size:11px;color:var(--text-secondary);margin-bottom:10px">
+        Live P&amp;ID sheets from PIMS for this job/unit — tick the ones required for MTO.
+      </div>
+      <div id="pidSelectList" style="display:flex;flex-direction:column;gap:6px;max-height:320px;overflow:auto"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="cancelPidSelectModal">Close</button>
+    </div>
+  </div>
+</div>
 
-function filterLines(q) {
-  const filtered = LINES.filter(l =>
-    l.tag.toLowerCase().includes(q.toLowerCase()) ||
-    l.desc.toLowerCase().includes(q.toLowerCase())
-  ).filter(l => activeFilter === 'all' || l.status === activeFilter);
-  renderLineList(filtered);
-}
+<!-- ASSIGNMENT SELECTION (blocks the workspace behind it until resolved) -->
+<div class="modal-overlay" id="assignmentModal">
+  <div class="modal">
+    <div class="modal-header">
+      <i class="ti ti-briefcase" style="font-size:18px;color:var(--color-accent-strong)"></i>
+      <div class="modal-title">Select Job / Unit</div>
+    </div>
+    <form id="assignmentForm">
+      <div class="modal-body">
+        <div id="assignmentWelcome" style="font-size:13px;color:var(--text-secondary);margin-bottom:14px"></div>
+        <div class="field">
+          <label class="field-label" for="assignmentSelect">Job / Unit</label>
+          <div class="input-wrap">
+            <i class="ti ti-briefcase"></i>
+            <select class="has-icon" id="assignmentSelect"></select>
+          </div>
+          <div class="field-hint">You're assigned to more than one job/unit — choose which to work under</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" id="assignmentBack">Back to login</button>
+        <button type="submit" class="btn btn-primary" id="assignmentSubmitBtn">
+          <span id="assignBtnText">Enter Workspace</span>
+          <div class="spinner" id="assignSpinner" style="display:none"></div>
+          <i class="ti ti-arrow-right" id="assignBtnIcon"></i>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
 
-function filterChip(el, f) {
-  activeFilter = f;
-  document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-  el.classList.add('active');
-  filterLines(document.getElementById('lineSearch').value);
-}
+<div class="toast" id="toast">
+  <span class="toast-icon" id="toastIcon"></span>
+  <div>
+    <div class="toast-title" id="toastTitle"></div>
+    <div class="toast-sub" id="toastSub"></div>
+  </div>
+</div>
 
-function selectLine(id) {
-  activeLine = id;
-  const l = LINES.find(x => x.id === id);
-  renderLineList(LINES.filter(line => activeFilter==='all' || line.status===activeFilter));
-  document.querySelector(`.line-item[onclick="selectLine(${id})"]`)?.classList.add('active');
-
-  // Update pane titles
-  document.getElementById('pidTitle').textContent = 'P&ID — ' + l.tag;
-  document.getElementById('pidSheetBadge').textContent = 'Sheet ' + l.sheet + ' Rev B';
-  document.getElementById('mtoTitle').textContent = 'Manual MTO — ' + l.tag;
-  document.getElementById('selectedLineStat').innerHTML = `<i class="ti ti-point-filled" style="font-size:8px;color:var(--blue)"></i> ${l.tag}`;
-  document.getElementById('sheetLabel').textContent = `EIL / PDH-PP / P&ID / ${l.sheet} Rev B`;
-
-  // Load MTO
-  mtoItems = JSON.parse(JSON.stringify(MTO_DATA[id] || []));
-  nextId = mtoItems.length + 1;
-  renderMTO();
-  drawPid(l);
-}
-
-/* ══════════════════════════════════════
-   P&ID CANVAS
-══════════════════════════════════════ */
-let pidCanvas, ctx, currentLine = null;
-function initPid() {
-  pidCanvas = document.getElementById('pidCanvas');
-  ctx = pidCanvas.getContext('2d');
-  resizePid();
-  window.addEventListener('resize', resizePid);
-  // Drag
-  pidCanvas.addEventListener('mousedown', e => { pidDragging=true; pidDragX=e.clientX; pidDragY=e.clientY; pidCanvas.classList.add('grabbing'); });
-  window.addEventListener('mousemove', e => {
-    if (!pidDragging) return;
-    pidOffsetX += e.clientX - pidDragX; pidOffsetY += e.clientY - pidDragY;
-    pidDragX = e.clientX; pidDragY = e.clientY;
-    if (currentLine) drawPid(currentLine);
-  });
-  window.addEventListener('mouseup', () => { pidDragging=false; pidCanvas.classList.remove('grabbing'); });
-  pidCanvas.addEventListener('wheel', e => { e.preventDefault(); pidZoom(e.deltaY < 0 ? 1.1 : 0.9); });
-  drawEmptyPid();
-}
-
-function resizePid() {
-  const wrap = pidCanvas.parentElement;
-  pidCanvas.width  = wrap.clientWidth;
-  pidCanvas.height = wrap.clientHeight;
-  if (currentLine) drawPid(currentLine); else drawEmptyPid();
-}
-
-function drawEmptyPid() {
-  if (!ctx) return;
-  const W = pidCanvas.width, H = pidCanvas.height;
-  ctx.clearRect(0,0,W,H);
-  ctx.fillStyle = 'rgba(30,144,255,0.04)';
-  ctx.font = '13px JetBrains Mono, monospace';
-  ctx.fillStyle = '#1e3d55';
-  ctx.textAlign = 'center';
-  ctx.fillText('Select a line to view P&ID', W/2, H/2);
-}
-
-function drawPid(line) {
-  currentLine = line;
-  const W = pidCanvas.width, H = pidCanvas.height;
-  ctx.clearRect(0,0,W,H);
-  ctx.save();
-  ctx.translate(W/2 + pidOffsetX, H/2 + pidOffsetY);
-  ctx.scale(pidZoomLevel, pidZoomLevel);
-
-  const col = {
-    dimLine:   'rgba(100,180,255,0.18)',
-    hiLine:    '#1e90ff',
-    hiGlow:    'rgba(30,144,255,0.15)',
-    vessel:    'rgba(100,180,255,0.3)',
-    text:      'rgba(100,180,255,0.5)',
-    hiText:    '#1e90ff',
-    tag:       'rgba(30,144,255,0.85)',
-  };
-
-  const W2 = W/2, H2 = H/2;
-
-  // ─── Vessels ───
-  roundRect(ctx, -W2+30, -H2+60, 60, 80, 4);
-  ctx.strokeStyle = col.vessel; ctx.lineWidth=1.5; ctx.stroke();
-  ctx.fillStyle = col.text; ctx.font='9px JetBrains Mono';
-  ctx.textAlign='center'; ctx.fillText('V-101', -W2+60, -H2+102);
-
-  roundRect(ctx, W2-100, -H2+40, 70, 100, 4);
-  ctx.strokeStyle = col.vessel; ctx.lineWidth=1.5; ctx.stroke();
-  ctx.fillStyle = col.text; ctx.fillText('E-102', W2-65, -H2+93);
-
-  // Pump circle
-  ctx.beginPath(); ctx.arc(0, H2-70, 24, 0, Math.PI*2);
-  ctx.strokeStyle = col.vessel; ctx.lineWidth=1.5; ctx.stroke();
-  ctx.fillStyle = col.text; ctx.font='8px JetBrains Mono';
-  ctx.fillText('P-101A', 0, H2-66);
-
-  // ─── Dim lines ───
-  ctx.setLineDash([4,3]); ctx.strokeStyle = col.dimLine; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(-W2+30, -H2+30); ctx.lineTo(0, -H2+30); ctx.lineTo(0, -H2+40); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(W2-65, -H2+140); ctx.lineTo(W2-65, -H2+160); ctx.lineTo(W2-20, -H2+160); ctx.stroke();
-  ctx.setLineDash([]);
-
-  // ─── Highlighted line ───
-  const pts = linePathForId(line.id, W2, H2);
-  if (pts) {
-    // Glow
-    ctx.beginPath(); movePts(ctx, pts);
-    ctx.strokeStyle = col.hiGlow; ctx.lineWidth=8; ctx.lineJoin='round'; ctx.stroke();
-    // Main
-    ctx.beginPath(); movePts(ctx, pts);
-    ctx.strokeStyle = col.hiLine; ctx.lineWidth=2.5; ctx.lineJoin='round'; ctx.stroke();
-
-    // Inline tag
-    const mid = pts[Math.floor(pts.length/2)];
-    ctx.fillStyle = 'rgba(30,144,255,0.22)';
-    roundRect(ctx, mid[0]-50, mid[1]-9, 100, 18, 3); ctx.fill();
-    ctx.strokeStyle = col.tag; ctx.lineWidth=0.5; ctx.stroke();
-    ctx.fillStyle = col.hiText; ctx.font='7px JetBrains Mono';
-    ctx.textAlign='center'; ctx.fillText(line.tag, mid[0], mid[1]+3);
-  }
-
-  // Valves on line
-  if (pts && pts.length >= 3) {
-    drawValve(ctx, pts[2][0], pts[2][1], col.vessel);
-    if (pts.length > 4) drawValve(ctx, pts[4][0], pts[4][1], col.vessel);
-  }
-
-  // Flow arrows
-  if (pts && pts.length >= 2) {
-    for (let i=1; i<pts.length; i+=2) {
-      const ax = (pts[i-1][0]+pts[i][0])/2, ay = (pts[i-1][1]+pts[i][1])/2;
-      const dx = pts[i][0]-pts[i-1][0], dy = pts[i][1]-pts[i-1][1];
-      const a = Math.atan2(dy,dx);
-      ctx.save(); ctx.translate(ax,ay); ctx.rotate(a);
-      ctx.beginPath(); ctx.moveTo(-6,-4); ctx.lineTo(0,0); ctx.lineTo(-6,4);
-      ctx.strokeStyle='rgba(30,144,255,0.55)'; ctx.lineWidth=1.5; ctx.stroke();
-      ctx.restore();
-    }
-  }
-
-  ctx.restore();
-  document.getElementById('zoomLabel').textContent = Math.round(pidZoomLevel*100) + '%';
-}
-
-function linePathForId(id, W2, H2) {
-  const paths = {
-    1: [[-W2+90,-30],[-W2+160,-30],[-W2+160, H2-120],[-60, H2-120],[-60, H2-94]],
-    2: [[-W2+90,20],[-W2+180,20],[W2-200,20],[W2-200,-H2+100],[W2-100,-H2+100]],
-    3: [[-W2+40,80],[0,80],[0,-60],[W2-200,-60]],
-    4: [[W2-200,80],[W2-100,80],[W2-100,-80]],
-    5: [[-W2+100,120],[-30,120],[-30,180],[24,180]],
-    6: [[80,H2-80],[80,H2-120],[W2-100,H2-120]],
-    7: [[-W2+90,-80],[0,-80],[0,-120],[W2-120,-120]],
-    8: [[-100,-H2+80],[-100,100],[100,100],[100,-H2+80]],
-    9: [[50,H2-100],[50,H2-150],[W2-80,H2-150]],
-  };
-  return paths[id] || null;
-}
-
-function movePts(ctx, pts) {
-  ctx.moveTo(pts[0][0], pts[0][1]);
-  for (let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0], pts[i][1]);
-}
-
-function drawValve(ctx, x, y, col) {
-  ctx.save(); ctx.translate(x,y);
-  ctx.beginPath(); ctx.moveTo(-8,-5); ctx.lineTo(0,0); ctx.lineTo(-8,5);
-  ctx.moveTo(8,-5); ctx.lineTo(0,0); ctx.lineTo(8,5);
-  ctx.strokeStyle = col; ctx.lineWidth=1.3; ctx.stroke();
-  ctx.restore();
-}
-
-function roundRect(ctx, x,y,w,h,r) {
-  ctx.beginPath();
-  ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.arcTo(x+w,y,x+w,y+r,r);
-  ctx.lineTo(x+w,y+h-r); ctx.arcTo(x+w,y+h,x+w-r,y+h,r);
-  ctx.lineTo(x+r,y+h); ctx.arcTo(x,y+h,x,y+h-r,r);
-  ctx.lineTo(x,y+r); ctx.arcTo(x,y,x+r,y,r);
-  ctx.closePath();
-}
-
-function pidZoom(f) {
-  pidZoomLevel = Math.max(0.3, Math.min(4, pidZoomLevel * f));
-  if (currentLine) drawPid(currentLine); else drawEmptyPid();
-}
-function pidReset() { pidZoomLevel=1; pidOffsetX=0; pidOffsetY=0; if (currentLine) drawPid(currentLine); }
-function prevSheet() { notify('info','P-101 Rev B','Previous sheet loaded'); }
-function nextSheet() { notify('info','P-102 Rev B','Next sheet loaded'); }
-
-/* ══════════════════════════════════════
-   MTO TABLE
-══════════════════════════════════════ */
-function renderMTO() {
-  const wrap = document.getElementById('mtoTableWrap');
-  const empty = document.getElementById('emptyState');
-  const summary = document.getElementById('mtoSummary');
-
-  if (!activeLine) {
-    wrap.style.display='none'; empty.style.display='flex'; summary.style.display='none'; return;
-  }
-  wrap.style.display='block'; empty.style.display='none'; summary.style.display='flex';
-
-  const tbody = document.getElementById('mtoTbody');
-  tbody.innerHTML = mtoItems.map((item, i) => `
-    <tr class="${i===selectedRow?'row-hi':''}">
-      <td style="color:var(--t4);font-family:var(--font-mono);font-size:10px">${String(i+1).padStart(2,'0')}</td>
-      <td>
-        <div style="font-size:12px;color:var(--t1)">${item.desc}</div>
-        ${item.rem ? `<div style="font-size:10px;color:var(--t4);margin-top:2px">${item.rem}</div>` : ''}
-      </td>
-      <td class="td-tag">${item.size}</td>
-      <td><span class="badge badge-muted">${item.spec}</span></td>
-      <td style="color:var(--t3);font-size:11px">${item.sch}</td>
-      <td style="color:var(--t3);font-size:11px">${item.unit}</td>
-      <td class="td-num">
-        <input class="inline-input" type="text" value="${item.qty}"
-               onchange="updateQty(${item.id}, this.value)"
-               onfocus="this.select()" style="width:50px;text-align:right"/>
-      </td>
-      <td class="td-acts">
-        <div class="tb-btn" onclick="copyItem(${item.id})" title="Duplicate"><i class="ti ti-copy"></i></div>
-        <div class="tb-btn" onclick="deleteItem(${item.id})" title="Delete"
-             style="color:var(--red)"><i class="ti ti-trash"></i></div>
-      </td>
-    </tr>
-  `).join('');
-
-  // Summary counts
-  const pipes   = mtoItems.filter(x=>x.cat==='Pipe');
-  const fittings= mtoItems.filter(x=>['Elbow','Tee','Reducer','Cap'].includes(x.cat));
-  const valves  = mtoItems.filter(x=>x.cat==='Valve');
-  const pipeLen = pipes.reduce((s,p)=>s+(parseFloat(p.qty)||0),0);
-
-  document.getElementById('sumItems').textContent   = mtoItems.length;
-  document.getElementById('sumPipe').textContent    = pipeLen.toFixed(1) + ' m';
-  document.getElementById('sumFit').textContent     = fittings.reduce((s,x)=>s+(parseInt(x.qty)||0),0);
-  document.getElementById('sumValves').textContent  = valves.reduce((s,x)=>s+(parseInt(x.qty)||0),0);
-  document.getElementById('itemCountBadge').textContent = mtoItems.length + ' items';
-}
-
-let selectedRow = -1;
-
-function updateQty(id, val) {
-  const item = mtoItems.find(x=>x.id===id);
-  if (item) { item.qty = isNaN(parseFloat(val)) ? val : parseFloat(val); }
-  markUnsaved();
-  renderMTO();
-}
-
-function deleteItem(id) {
-  mtoItems = mtoItems.filter(x=>x.id!==id);
-  markUnsaved(); renderMTO();
-  notify('info','Item removed','MTO updated');
-}
-
-function copyItem(id) {
-  const item = mtoItems.find(x=>x.id===id);
-  if (!item) return;
-  const copy = {...item, id: ++nextId};
-  const idx = mtoItems.findIndex(x=>x.id===id);
-  mtoItems.splice(idx+1, 0, copy);
-  markUnsaved(); renderMTO();
-  notify('success','Item duplicated','Edit quantity as needed');
-}
-
-function markUnsaved() {
-  document.getElementById('lastSavedBadge').style.display='inline-flex';
-  document.getElementById('savedBadge').style.display='none';
-}
-function markSaved() {
-  document.getElementById('lastSavedBadge').style.display='none';
-  document.getElementById('savedBadge').style.display='inline-flex';
-}
-
-/* ══════════════════════════════════════
-   ADD ITEM MODAL
-══════════════════════════════════════ */
-function openAddModal() {
-  if (!activeLine) { notify('error','No line selected','Please select a line first'); return; }
-  document.getElementById('addModal').classList.add('open');
-  setTimeout(() => document.getElementById('mi_desc').focus(), 200);
-}
-function closeAddModal() { document.getElementById('addModal').classList.remove('open'); }
-
-function selectCat(el, cat) {
-  selectedCat = cat;
-  document.querySelectorAll('.cat-btn').forEach(b=>b.classList.remove('active'));
-  el.classList.add('active');
-  // Prefill description
-  const presets = {
-    Pipe:'CS ERW Pipe SCH-40', Elbow:'CS BW Elbow 90° LR', Tee:'CS BW Tee Equal',
-    Reducer:'CS BW Eccentric Reducer', Flange:'CS WN Flange RF 300#',
-    Valve:'CS Gate Valve FF', Gasket:'Spiral Wound Gasket SS+Gr.',
-    'Stud Bolt':'Stud Bolt A193 B7 w/ Nuts', Cap:'CS BW Cap', Other:''
-  };
-  document.getElementById('mi_desc').value = presets[cat] || '';
-  if (['Gasket','Stud Bolt','Cap'].includes(cat)) {
-    document.getElementById('mi_unit').value='NOS';
-  }
-  if (cat==='Pipe') document.getElementById('mi_unit').value='m';
-}
-
-function saveItem() {
-  const desc = document.getElementById('mi_desc').value.trim();
-  if (!desc) { document.getElementById('mi_desc').classList.add('input-err'); return; }
-  document.getElementById('mi_desc').classList.remove('input-err');
-  const item = {
-    id: ++nextId, cat: selectedCat,
-    desc, size: document.getElementById('mi_size').value,
-    spec: document.getElementById('mi_spec').value,
-    sch:  document.getElementById('mi_sch').value,
-    unit: document.getElementById('mi_unit').value,
-    qty:  parseFloat(document.getElementById('mi_qty').value) || 1,
-    rem:  document.getElementById('mi_rem').value.trim(),
-  };
-  mtoItems.push(item);
-  // Update line item count
-  const l = LINES.find(x=>x.id===activeLine);
-  if (l) { l.items = mtoItems.length; l.status = 'inprogress'; }
-  markUnsaved(); renderMTO(); closeAddModal();
-  notify('success','Item added',`${item.desc} · ${item.qty} ${item.unit}`);
-  // Clear form
-  document.getElementById('mi_desc').value='';
-  document.getElementById('mi_qty').value='';
-  document.getElementById('mi_rem').value='';
-}
-
-/* ══════════════════════════════════════
-   UPLOAD MODAL
-══════════════════════════════════════ */
-function openUploadModal() {
-  if (!activeLine) { notify('error','No line selected','Please select a line first'); return; }
-  document.getElementById('uploadModal').classList.add('open');
-}
-function closeUploadModal() { document.getElementById('uploadModal').classList.remove('open'); }
-
-function handleFile(input) {
-  const f = input.files[0]; if (!f) return;
-  document.getElementById('filePreview').style.display='block';
-  document.getElementById('fileName').textContent = f.name;
-  document.getElementById('fileInfo').textContent =
-    (f.size/1024).toFixed(1) + ' KB · ' + (f.name.endsWith('.csv')?'CSV':'Excel') + ' format';
-}
-
-function processUpload() {
-  closeUploadModal();
-  notify('success','Model dump uploaded','14 items parsed — ready for reconciliation');
-  setTimeout(() => goReconcile(), 1200);
-}
-
-/* ══════════════════════════════════════
-   NAVIGATION
-══════════════════════════════════════ */
-function exportMTO() {
-  if (!activeLine) { notify('error','No line selected',''); return; }
-  notify('info','Exporting MTO…','CSV download will begin shortly');
-}
-
-function goReconcile() {
-  if (!activeLine) { notify('error','No line selected','Select a line first'); return; }
-  sessionStorage.setItem('mto_active_line', JSON.stringify(LINES.find(x=>x.id===activeLine)));
-  sessionStorage.setItem('mto_items', JSON.stringify(mtoItems));
-  window.location.href = 'reconcile.html';
-}
-
-/* ══════════════════════════════════════
-   NOTIFICATIONS
-══════════════════════════════════════ */
-let notifTimer;
-function notify(type, title, sub) {
-  const icons = { success:'ti-check-circle', error:'ti-alert-circle', info:'ti-info-circle' };
-  const colors = { success:'var(--cyan)', error:'var(--red)', info:'var(--blue)' };
-  const el = document.getElementById('notif');
-  document.getElementById('notifTitle').textContent = title;
-  document.getElementById('notifSub').textContent   = sub;
-  document.getElementById('notifIcon').innerHTML = `<i class="ti ${icons[type]}" style="color:${colors[type]}"></i>`;
-  el.classList.add('show');
-  clearTimeout(notifTimer);
-  notifTimer = setTimeout(() => el.classList.remove('show'), 3200);
-}
-
-/* Close modals on overlay click */
-document.querySelectorAll('.modal-overlay').forEach(ov => {
-  ov.addEventListener('click', e => { if (e.target===ov) ov.classList.remove('open'); });
-});
-
-/* Keyboard shortcuts */
-document.addEventListener('keydown', e => {
-  if (e.key==='Escape') document.querySelectorAll('.modal-overlay.open').forEach(m=>m.classList.remove('open'));
-  if ((e.ctrlKey||e.metaKey) && e.key==='Enter') { if (document.getElementById('addModal').classList.contains('open')) saveItem(); }
-  if ((e.ctrlKey||e.metaKey) && e.key==='s') { e.preventDefault(); markSaved(); notify('success','Saved','MTO saved successfully'); }
-});
-</script>
+<script src="js/theme.js"></script>
+<script src="js/data.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="js/workspace.js"></script>
 </body>
 </html>

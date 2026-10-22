@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>IPMCS · Engineers India Limited</title>
+<script>document.documentElement.setAttribute('data-theme', localStorage.getItem('ipmcs_theme') || 'dark');</script>
+<link rel="stylesheet" href="css/tokens.css"/>
+<link rel="stylesheet" href="css/base.css"/>
+<link rel="stylesheet" href="css/components.css"/>
+<link rel="stylesheet" href="css/login.css"/>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css"/>
+</head>
+<body>
+
+<div class="bg">
+  <div class="bg-grid"></div>
+  <div class="bg-glow"></div>
+</div>
+
+<button class="theme-toggle theme-toggle-fixed" title="Toggle light / dark theme">
+  <i class="ti ti-sun"></i>
+</button>
+
+<div class="page">
+  <!-- LEFT: brand + pitch -->
+  <div class="brand-panel">
+    <div class="brand-mark">
+      <div class="brand-icon"><i class="ti ti-building-factory-2"></i></div>
+      <div>
+        <div class="brand-name">Engineers India Limited</div>
+        <div class="brand-sub">Piping Division · EPC Department</div>
+      </div>
+    </div>
+
+    <div class="pitch">
+      <div class="pitch-eyebrow">Integrated Piping MTO Platform</div>
+      <h1 class="pitch-title">Material<br>Take<em>Off</em><br>Control System</h1>
+      <p class="pitch-desc">
+        Capture manual field takeoff, compare it against 3D model extractions,
+        and track every line from first entry to sign-off in one workspace.
+      </p>
+      <div class="pitch-tags">
+        <div class="pitch-tag"><i class="ti ti-topology-star"></i>P&amp;ID Viewer</div>
+        <div class="pitch-tag"><i class="ti ti-list-check"></i>Manual MTO</div>
+        <div class="pitch-tag"><i class="ti ti-upload"></i>Model Dump</div>
+        <div class="pitch-tag"><i class="ti ti-file-export"></i>Report Export</div>
+      </div>
+    </div>
+
+    <div class="brand-footer">
+      <span>IPMCS</span><span>·</span><span>PDH-PP Project</span><span>·</span><span>v0.1.0</span>
+    </div>
+  </div>
+
+  <!-- RIGHT: login form -->
+  <div class="form-panel">
+    <div class="form-head">
+      <div class="form-eyebrow">Secure Access</div>
+      <div class="form-title">Sign In</div>
+      <div class="form-subtitle">Use your EIL network credentials</div>
+    </div>
+
+    <form id="loginForm" class="form-fields" autocomplete="off">
+      <div class="field">
+        <label class="field-label" for="empId">Employee ID</label>
+        <div class="input-wrap">
+          <i class="ti ti-id-badge"></i>
+          <input class="has-icon" type="text" id="empId" placeholder="e.g. A365" autocomplete="username" spellcheck="false"/>
+        </div>
+        <div class="field-error" id="empIdErr">Employee ID is required</div>
+      </div>
+
+      <div class="field">
+        <label class="field-label" for="password">Password</label>
+        <div class="input-wrap" style="position:relative">
+          <i class="ti ti-lock"></i>
+          <input class="has-icon" type="password" id="password" placeholder="••••••••" autocomplete="current-password"/>
+          <button type="button" class="pw-toggle" id="pwToggle">
+            <i class="ti ti-eye" id="pwIcon"></i>
+          </button>
+        </div>
+        <div class="field-error" id="pwErr">Password is required</div>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-submit">
+        <span id="btnText">Access Workspace</span>
+        <div class="spinner" id="spinner"></div>
+        <i class="ti ti-arrow-right" id="btnIcon"></i>
+      </button>
+    </form>
+
+    <div class="sys-strip">
+      <span>IPMCS v0.1.0</span>
+      <span style="display:flex;align-items:center;gap:5px;">
+        <span class="dot dot-success dot-pulse"></span>System Online
+      </span>
+      <span>EIL · Piping Div.</span>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast">
+  <span class="toast-icon" id="toastIcon"></span>
+  <div>
+    <div class="toast-title" id="toastTitle"></div>
+    <div class="toast-sub" id="toastSub"></div>
+  </div>
+</div>
+
+<script src="js/theme.js"></script>
+<script src="js/data.js"></script>
+<script src="js/login.js"></script>
+</body>
+</html>
