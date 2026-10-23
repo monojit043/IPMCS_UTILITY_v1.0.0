@@ -175,85 +175,45 @@ const DataStore = (() => {
     clearPendingAssignment();
   }
 
-  /* ── Lines ── */
-  function getLines() {
-    return apiFetch('/lines');
-  }
-
-  function getLine(id) {
-    return apiFetch(`/lines/${id}`);
-  }
-
-  function setLineStatus(lineId, status, itemCount) {
-    return apiFetch(`/lines/${lineId}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ status, items: itemCount }),
-    });
-  }
-
-  /* Cascading line-identity lookups: Service -> Sequence No -> Zone. Queried
-     live against ePULSE (line list + lines read off current P&IDs) on the
-     backend; zones are IPMCS's own. Unit No is fixed
-     by the logged-in session's PIMS assignment, not picked here — see
-     currentUser.unitNo in workspace.js. resolveLine is the moment the line
-     actually gets pulled in and saved into our own lines table. */
+  /* ── Line selection + line data: read live from ePULSE (line list +
+     current P&IDs) on the backend; nothing is saved by browsing. A line is
+     Service / Unit / LSR NO / Subline No.; the Unit comes from the Unit
+     dropdown (X-Unit-No). ── */
   function getServices() {
     return apiFetch('/lines/meta/services');
   }
-  function getSequences(service) {
-    return apiFetch('/lines/meta/sequences' + qs({ service }));
+  function getLsrNos(service) {
+    return apiFetch('/lines/meta/lsr' + qs({ service }));
   }
-  // COSMAS Subline No. for an LSR NO: P&ID sub-lines, '' = the line itself
-  function getSublines(service, seqNo) {
-    return apiFetch('/lines/meta/sublines' + qs({ service, seq: seqNo }));
+  // P&ID sub-lines of an LSR NO; '' = the line itself
+  function getSublines(service, lsr) {
+    return apiFetch('/lines/meta/sublines' + qs({ service, lsr }));
   }
-  // COSMAS line header (what the engineer entered / overrode)
-  function saveLineCosmas(lineId, fields) {
-    return apiFetch(`/lines/${lineId}/cosmas`, { method: 'PUT', body: JSON.stringify(fields) });
-  }
-  function getZones(service, seqNo) {
-    return apiFetch('/lines/meta/zones' + qs({ service, seq: seqNo }));
-  }
-  async function resolveLine(service, seqNo, zone) {
+  // Line data shown as soon as the line is chosen (null when not found)
+  async function getLineData(service, lsr, subline) {
     try {
-      return await apiFetch('/lines/lookup' + qs({ service, seq: seqNo, zone }));
+      return await apiFetch('/lines/data' + qs({ service, lsr, subline: subline || '' }));
     } catch (err) {
       return null;
     }
   }
-
-  /* ── Manual MTO items ── */
-  function getMTOItems(lineId) {
-    return apiFetch(`/lines/${lineId}/mto-items`);
-  }
-  function addMTOItem(lineId, item) {
-    return apiFetch(`/lines/${lineId}/mto-items`, { method: 'POST', body: JSON.stringify(item) });
-  }
-  // Partial update of a BoM row: pipingClass, inputCode, itemCode, dia1, dia2, qty
-  function updateMTOItem(itemId, fields) {
-    return apiFetch(`/mto-items/${itemId}`, { method: 'PATCH', body: JSON.stringify(fields) });
-  }
-  function deleteMTOItem(itemId) {
-    return apiFetch(`/mto-items/${itemId}`, { method: 'DELETE' });
+  // Zones already saved for the line: [{ id, zone, status, items }]
+  function getZones(service, lsr, subline) {
+    return apiFetch('/lines/meta/zones' + qs({ service, lsr, subline: subline || '' }));
   }
 
-  /* ── Model dump items (MTO from Dump Check) ── */
-  function getDumpItems(lineId) {
-    return apiFetch(`/lines/${lineId}/dump-items`);
+  /* ── Saved line + zones (mto_line_zones): COSMAS header + BoM rows ── */
+  // All saved zones of the unit, each with its live line data in .line
+  function getLineZones() {
+    return apiFetch('/line-zones');
   }
-  function addDumpItem(lineId, item) {
-    return apiFetch(`/lines/${lineId}/dump-items`, { method: 'POST', body: JSON.stringify(item) });
+  // { zone, line, mto, dump, extracted }
+  function getLineZone(id) {
+    return apiFetch(`/line-zones/${id}`);
   }
-  function updateDumpItem(itemId, fields) {
-    return apiFetch(`/dump-items/${itemId}`, { method: 'PATCH', body: JSON.stringify(fields) });
-  }
-  function deleteDumpItem(itemId) {
-    return apiFetch(`/dump-items/${itemId}`, { method: 'DELETE' });
-  }
-
-  /* ── SP P&ID extracted items (read-only) ── */
-  function getExtractedItems(lineId) {
-    return apiFetch(`/lines/${lineId}/extracted-items`);
+  // { service, lsrNo, sublineNo, zone, header, kind: 'mto'|'dump', rows } → same shape as getLineZone
+  function saveLineZone(payload) {
+    return apiFetch('/line-zones', { method: 'PUT', body: JSON.stringify(payload) });
   }
 
   /* ── P&ID library: ADMIN-curated folders referencing PIMS's own P&ID
@@ -285,8 +245,8 @@ const DataStore = (() => {
     return apiFetch(`/pid/documents/${masterIndexId}`);
   }
   // Resolves the P&ID sheet a given line is actually drawn on.
-  function getPidDocumentForLine(lineId) {
-    return apiFetch(`/pid/line/${lineId}/document`);
+  function getPidDocumentForLine(service, lsr, subline) {
+    return apiFetch('/pid/line-document' + qs({ service, lsr, subline: subline || '' }));
   }
   function pidFileUrl(masterIndexId) {
     return `${API_BASE}/pid/pims-file/${masterIndexId}`;
@@ -315,11 +275,8 @@ const DataStore = (() => {
 
   return {
     login, ssoLogin, logout, selectAssignment, getSession, clearSession, getUnits, getUnit, setUnit, getPendingAssignment, clearPendingAssignment,
-    getLines, getLine, setLineStatus,
-    getServices, getSequences, getSublines, getZones, resolveLine, saveLineCosmas,
-    getMTOItems, addMTOItem, updateMTOItem, deleteMTOItem,
-    getDumpItems, addDumpItem, updateDumpItem, deleteDumpItem,
-    getExtractedItems,
+    getServices, getLsrNos, getSublines, getLineData, getZones,
+    getLineZones, getLineZone, saveLineZone,
     getPidFolders, createPidFolder, getPidDocuments,
     getAvailablePimsDocuments, addPidFolderSelection, removePidFolderSelection,
     getPidDocument, getPidDocumentForLine, pidFileUrl, authHeaders,

@@ -1,61 +1,65 @@
 const HttpError = require('../middlewares/HttpError');
-const linesService = require('../services/lines.service');
+const lineData = require('../services/lineData.service');
+const lineZones = require('../services/lineZones.service');
 
-async function list(req, res) {
-  res.json(await linesService.getAllLines(req.user.jobNo, req.user.unitNo));
-}
-
-async function getOne(req, res) {
-  const line = await linesService.getLineById(req.params.id);
-  if (!line) throw new HttpError(404, 'Line not found');
-  res.json(line);
-}
-
-async function update(req, res) {
-  const { status, items } = req.body;
-  const line = await linesService.updateLineStatus(req.params.id, status, items);
-  if (!line) throw new HttpError(404, 'Line not found');
-  res.json(line);
-}
-
+// ── Line selection: Service → LSR NO → Subline No. (live from ePULSE) ──
 async function services(req, res) {
-  res.json(await linesService.getServices(req.user.jobNo, req.user.unitNo));
+  res.json(await lineData.getServices(req.user.jobNo, req.user.unitNo));
 }
 
-async function sequences(req, res) {
+async function lsrNos(req, res) {
   const { service } = req.query;
   if (!service) throw new HttpError(400, 'service is required');
-  res.json(await linesService.getSequences(req.user.jobNo, req.user.unitNo, service));
+  res.json(await lineData.getLsrNos(req.user.jobNo, req.user.unitNo, service));
 }
 
 async function sublines(req, res) {
-  const { service, seq } = req.query;
-  if (!service || !seq) throw new HttpError(400, 'service and seq are required');
-  res.json(await linesService.getSublines(req.user.jobNo, req.user.unitNo, service, seq));
+  const { service, lsr } = req.query;
+  if (!service || !lsr) throw new HttpError(400, 'service and lsr are required');
+  res.json(await lineData.getSublines(req.user.jobNo, req.user.unitNo, service, lsr));
 }
 
-// COSMAS line header (Contr.Code, DRG indicator, batch, …) for a line of the user's own job/unit
-async function updateCosmas(req, res) {
-  const line = await linesService.getLineById(req.params.id);
-  if (!line || line.jobNo !== req.user.jobNo || line.unitNo !== req.user.unitNo) throw new HttpError(404, 'Line not found');
-  res.json(await linesService.updateCosmas(req.params.id, req.body || {}));
-}
-
-async function zones(req, res) {
-  const { service, seq } = req.query;
-  if (!service || !seq) throw new HttpError(400, 'service and seq are required');
-  res.json(await linesService.getZones(req.user.jobNo, req.user.unitNo, service, seq));
-}
-
-async function lookup(req, res) {
-  const { service, seq, zone } = req.query;
-  if (!service || !seq || !zone) {
-    throw new HttpError(400, 'service, seq and zone are required');
-  }
-  if (!linesService.normalizeZone(zone)) throw new HttpError(400, 'Zone must be 1–3 letters or digits, e.g. A');
-  const line = await linesService.resolveLine(req.user.jobNo, req.user.unitNo, service, seq, zone, req.user.empId);
-  if (!line) throw new HttpError(404, 'No line matches that Service / Sequence No in the line list or the uploaded P&IDs');
+// Line data as soon as Service / Unit / LSR NO / Subline No. are chosen — nothing saved
+async function data(req, res) {
+  const { service, lsr, subline = '' } = req.query;
+  if (!service || !lsr) throw new HttpError(400, 'service and lsr are required');
+  const line = await lineData.getLineData(req.user.jobNo, req.user.unitNo, service, lsr, subline);
+  if (!line) throw new HttpError(404, 'This line is not in the line list or the uploaded P&IDs');
   res.json(line);
 }
 
-module.exports = { list, getOne, update, updateCosmas, services, sequences, sublines, zones, lookup };
+// Zones already saved for the line
+async function zones(req, res) {
+  const { service, lsr, subline = '' } = req.query;
+  if (!service || !lsr) throw new HttpError(400, 'service and lsr are required');
+  res.json(await lineZones.zonesForLine(req.user.jobNo, req.user.unitNo, service, lsr, subline));
+}
+
+// ── Saved line + zones (mto_line_zones) ──
+async function listZones(req, res) {
+  res.json(await lineZones.listZones(req.user.jobNo, req.user.unitNo));
+}
+
+async function getZone(req, res) {
+  const full = await lineZones.getZoneFull(req.params.id);
+  if (!full || full.zone.jobNo !== req.user.jobNo || full.zone.unitNo !== req.user.unitNo) {
+    throw new HttpError(404, 'Line zone not found');
+  }
+  res.json(full);
+}
+
+async function saveZone(req, res) {
+  const { service, lsrNo, sublineNo, zone, header, kind, rows } = req.body || {};
+  if (!service || !lsrNo || !zone) throw new HttpError(400, 'service, lsrNo and zone are required');
+  try {
+    res.json(await lineZones.saveZone({
+      jobNo: req.user.jobNo, unitNo: req.user.unitNo, empId: req.user.empId,
+      service, lsrNo, sublineNo: sublineNo || '', zone, header, kind, rows: rows || [],
+    }));
+  } catch (err) {
+    if (err instanceof lineZones.InputError) throw new HttpError(400, err.message);
+    throw err;
+  }
+}
+
+module.exports = { services, lsrNos, sublines, data, zones, listZones, getZone, saveZone };

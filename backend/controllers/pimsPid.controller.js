@@ -2,7 +2,6 @@ const fs = require('fs');
 const path = require('path');
 const HttpError = require('../middlewares/HttpError');
 const pimsPid = require('../services/pimsPid.service');
-const linesService = require('../services/lines.service');
 
 async function listAvailable(req, res) {
   res.json(await pimsPid.listAvailable(req.user.jobNo, req.user.unitNo));
@@ -14,10 +13,12 @@ async function getOne(req, res) {
   res.json(doc);
 }
 
+// P&ID a line is drawn on: ?service=&lsr=&subline= (the line selected in the page)
 async function getForLine(req, res) {
-  const line = await linesService.getLineById(req.params.lineId);
-  if (!line) throw new HttpError(404, 'Line not found');
-  const doc = await pimsPid.findForLine(line.jobNo, line.unitNo, line.service, line.seqNo);
+  const { service, lsr, subline } = req.query;
+  if (!service || !lsr) throw new HttpError(400, 'service and lsr are required');
+  const seq = subline ? `${lsr}-${subline}` : lsr;
+  const doc = await pimsPid.findForLine(req.user.jobNo, req.user.unitNo, service, seq);
   if (!doc) throw new HttpError(404, 'No P&ID found for this line');
   res.json(doc);
 }

@@ -36,25 +36,21 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   inputCtrl = createMtoController({
     key: 'input',
+    kind: 'mto',
     prefix: '',
+    onSaved: (full) => dumpCtrl.zoneSavedElsewhere(full),
     onlyLabel: 'Manual Only',
     drivesShared: true,
-    api: {
-      getItems: DataStore.getMTOItems, addItem: DataStore.addMTOItem,
-      updateItem: DataStore.updateMTOItem, deleteItem: DataStore.deleteMTOItem,
-    },
     lsIds: { matched: 'lsMatched', mismatch: 'lsMismatch', only: 'lsManualOnly', extractedOnly: 'lsExtractedOnly' },
   });
 
   dumpCtrl = createMtoController({
     key: 'dumpcheck',
+    kind: 'dump',
     prefix: 'dc_',
+    onSaved: (full) => inputCtrl.zoneSavedElsewhere(full),
     onlyLabel: 'Dump Only',
     drivesShared: false,
-    api: {
-      getItems: DataStore.getDumpItems, addItem: DataStore.addDumpItem,
-      updateItem: DataStore.updateDumpItem, deleteItem: DataStore.deleteDumpItem,
-    },
     lsIds: { matched: 'lsMatched', mismatch: 'lsMismatch', only: 'lsManualOnly', extractedOnly: 'lsExtractedOnly' },
   });
 
@@ -65,7 +61,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   try {
     await populateUnits();
-    allLines = await DataStore.getLines();
+    allLines = await loadAllLines();
     await Promise.all([inputCtrl.populateServices(), dumpCtrl.populateServices()]);
   } catch (err) {
     showToast('error', 'Could not load lines', err.message);
@@ -120,7 +116,7 @@ async function switchUnit(unitNo) {
   UNIT_SELECTS.forEach(id => { document.getElementById(id).value = unitNo; });
   showJobUnitLabel();
   try {
-    allLines = await DataStore.getLines();
+    allLines = await loadAllLines();
     await Promise.all([inputCtrl.resetForUnit(), dumpCtrl.resetForUnit()]);
     renderSummaryTable(document.getElementById('summarySearch').value);
     showToast('success', `Unit ${unitNo}`, 'Lines and pick lists now show this unit');
@@ -272,7 +268,7 @@ function renderSummaryTable(query) {
   const q = (query || '').toLowerCase();
   const activeFilter = window.summaryFilter || 'all';
   const filtered = allLines
-    .filter(l => l.lineNo.toLowerCase().includes(q))
+    .filter(l => `${l.lineNo} ${l.zone}`.toLowerCase().includes(q))
     .filter(l => activeFilter === 'all' || l.status === activeFilter);
 
   const tbody = document.getElementById('summaryTbody');
@@ -282,7 +278,7 @@ function renderSummaryTable(query) {
     tbody.innerHTML = filtered.map((l, i) => `
       <tr class="summary-row ${inputCtrl && inputCtrl.activeLineId === l.id ? 'row-active' : ''}" data-line-id="${l.id}">
         <td style="color:var(--text-faint);font-family:var(--font-mono);font-size:10px">${String(i + 1).padStart(2, '0')}</td>
-        <td class="td-tag">${l.lineNo}</td>
+        <td class="td-tag" title="${escAttr(l.line ? '' : 'Line no longer in the line list / P&IDs')}">${escAttr(l.lineNo)}${l.line ? '' : ' ⚠'}</td>
         <td style="color:var(--text-secondary);font-size:11px">${l.service}</td>
         <td style="color:var(--text-secondary);font-size:11px">${l.zone}</td>
         <td style="color:var(--text-secondary);font-size:11px">${l.pipingSpec || '—'}</td>
@@ -305,11 +301,12 @@ function renderSummaryTable(query) {
 
 /* ══════════════ MTO CONTROLLER FACTORY ══════════════
    Powers both "MTO Input" (manual items) and "MTO from Dump Check" (dump
-   items) tabs with the COSMAS Bill of Material content: Line Information
-   (Service / Unit / LSR NO / Subline No. / Zone), the COSMAS line header,
-   and the BoM rows (Piping Class | Input Code | Item Code | Dia1 | Dia2 |
-   Qty | Err) beside the SP P&ID comparison. Each tab has its own line
-   selection and item dataset; `p` is the element-id prefix ('' or 'dc_').
+   items) tabs with the COSMAS Bill of Material content.
+   Flow: Service → LSR NO → Subline No. shows the LINE DATA straight away
+   (read live from the line list / P&ID — nothing saved). Then the engineer
+   picks or adds a Zone and enters MTO; Save writes the line + zone, its COSMAS
+   header and the BoM rows to mto_line_zones (+ mto_items / dump_items).
+   Each tab has its own selection; `p` is the element-id prefix ('' or 'dc_').
    Row edits, inserts and deletes stay local until Save (Undo works on them). */
 const COSMAS_KEYS = [
   'contrCode', 'pipingClass', 'drgIndicator', 'drgAreaNo', 'drgRevNo',
@@ -318,24 +315,31 @@ const COSMAS_KEYS = [
 ];
 const ROW_FIELDS = ['pipingClass', 'inputCode', 'itemCode', 'dia1', 'dia2', 'qty'];
 const LINE_STATUS_TEXT = { pending: 'Pending', inprogress: 'In Progress', complete: 'Complete' };
+const SOURCE_LABELS = { line_list: 'Line list', pid: 'P&ID only', 'line_list+pid': 'Line list + P&ID', 'pid+parent_line': 'P&ID sub-line (P&T from parent line)' };
 
 function escAttr(v) {
   return String(v ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 }
 
-// LSR NO / Subline No. from a stored seq ("05341-01" → 05341 + 01; "05341A" stays whole)
-function splitSeqNo(seqNo) {
-  const m = String(seqNo || '').match(/^(.+?)-(\d{1,3})$/);
-  return m ? { lsr: m[1], subline: m[2] } : { lsr: String(seqNo || ''), subline: '' };
+// Saved zones of the unit, flattened for the summary table / navigation
+async function loadAllLines() {
+  const zones = await DataStore.getLineZones();
+  return zones.map(z => ({
+    ...z,
+    lineNo: z.line ? z.line.lineNo : `${z.service}-${z.lsrNo}${z.sublineNo ? '-' + z.sublineNo : ''}`,
+    pipingSpec: z.pipingClass || (z.line && z.line.pipingSpec) || null,
+    sizeIn: z.line ? z.line.sizeIn : null,
+  }));
 }
 
 function createMtoController(cfg) {
   const p = cfg.prefix;
   const byId = (name) => document.getElementById(p + name);
   const state = {
-    activeLineId: null, line: null,
+    lineData: null,    // live line data of the chosen Service/LSR/Subline
+    zone: '',          // chosen zone
+    zoneRec: null,     // saved mto_line_zones row (null = new, not saved yet)
     rows: [],          // working copy of the BoM rows (id < 0 = not saved yet)
-    deleted: [],       // saved rows removed since the last save
     extracted: [],
     selectedId: null,
     undo: [],
@@ -343,29 +347,33 @@ function createMtoController(cfg) {
   };
   let tmpId = -1;
 
-  /* ── Line Information: Service → LSR NO → Subline No. → Zone ── */
+  /* ── Line Information: Service → LSR NO → Subline No. (→ line data) → Zone ── */
   function fillSelect(sel, values, placeholder, labels = {}) {
     sel.innerHTML = `<option value="">${placeholder}</option>` +
       values.map(v => `<option value="${escAttr(v)}">${escAttr(labels[v] ?? v)}</option>`).join('');
   }
   const SUBLINE_NONE = '__none__';   // the line itself, no sub-line
+  const NEW_ZONE = '__new__';
+  const sublineValue = () => (byId('li_subline').value === SUBLINE_NONE ? '' : byId('li_subline').value);
 
   async function populateServices() {
     fillSelect(byId('li_service'), await DataStore.getServices(), 'Select…');
   }
 
+  function revertTo(selectName, value) { byId(selectName).value = value ?? ''; }
+
   async function onServiceChange() {
-    if (!confirmDiscard()) { byId('li_service').value = state.line?.service || ''; return; }
+    if (!confirmDiscard()) return revertTo('li_service', state.lineData?.service);
     const service = byId('li_service').value;
-    fillSelect(byId('li_seq'), service ? await DataStore.getSequences(service) : [], 'Select…');
+    fillSelect(byId('li_seq'), service ? await DataStore.getLsrNos(service) : [], 'Select…');
     byId('li_seq').disabled = !service;
-    resetBelow('seq');
+    resetFrom('subline');
   }
 
-  async function onSeqChange() {
-    if (!confirmDiscard()) { byId('li_seq').value = splitSeqNo(state.line?.seqNo).lsr; return; }
+  async function onLsrChange() {
+    if (!confirmDiscard()) return revertTo('li_seq', state.lineData?.lsrNo);
     const service = byId('li_service').value, lsr = byId('li_seq').value;
-    resetBelow('seq');
+    resetFrom('subline');
     if (!lsr) return;
     const subs = (await DataStore.getSublines(service, lsr)).map(s => s || SUBLINE_NONE);
     fillSelect(byId('li_subline'), subs, 'Select…', { [SUBLINE_NONE]: '— (none)' });
@@ -373,86 +381,111 @@ function createMtoController(cfg) {
     if (subs.length === 1) { byId('li_subline').value = subs[0]; await onSublineChange(); }
   }
 
-  function composedSeq() {
-    const lsr = byId('li_seq').value, sub = byId('li_subline').value;
-    if (!lsr || !sub) return '';
-    return sub === SUBLINE_NONE ? lsr : `${lsr}-${sub}`;
-  }
-
-  // Zones aren't in the line list or the P&IDs — they're set here: the zones
-  // already used for this line (or "A" for a new one), plus "Add zone…" for
-  // when a line is split between engineers.
-  const NEW_ZONE = '__new__';
-  function fillZones(zones) {
-    fillSelect(byId('li_zone'), zones, 'Select…');
-    if (zones.length) byId('li_zone').insertAdjacentHTML('beforeend', `<option value="${NEW_ZONE}">+ Add zone…</option>`);
-  }
-
+  // The line is now identified → show its data, offer its zones
   async function onSublineChange() {
-    if (!confirmDiscard()) { byId('li_subline').value = splitSeqNo(state.line?.seqNo).subline || SUBLINE_NONE; return; }
-    const seq = composedSeq();
-    fillZones(seq ? await DataStore.getZones(byId('li_service').value, seq) : []);
-    byId('li_zone').disabled = !seq;
-    clearSelection();
+    if (!confirmDiscard()) return revertTo('li_subline', state.lineData ? (state.lineData.sublineNo || SUBLINE_NONE) : '');
+    resetFrom('zone');
+    if (!byId('li_subline').value) return;
+    await showLine(byId('li_service').value, byId('li_seq').value, sublineValue());
+  }
+
+  async function showLine(service, lsr, subline) {
+    const data = await DataStore.getLineData(service, lsr, subline);
+    if (!data) { showToast('error', 'Line not found', 'Not in the line list or the uploaded P&IDs'); return false; }
+    state.lineData = data;
+    fillHeader();
+    byId('mtoTitle').textContent = (cfg.key === 'dumpcheck' ? 'MTO from Dump Check — ' : 'Manual MTO — ') + data.lineNo;
+    await fillZones();
+    byId('li_zone').disabled = false;
+    refresh();
+    return true;
+  }
+
+  // Zones already saved for this line, else "A"; plus "+ Add zone…"
+  async function fillZones() {
+    const d = state.lineData;
+    const saved = await DataStore.getZones(d.service, d.lsrNo, d.sublineNo);
+    const zones = saved.length ? saved.map(z => z.zone) : ['A'];
+    fillSelect(byId('li_zone'), zones, 'Select…',
+      Object.fromEntries(saved.map(z => [z.zone, `${z.zone}  (${z.items} rows · ${LINE_STATUS_TEXT[z.status]})`])));
+    byId('li_zone').insertAdjacentHTML('beforeend', `<option value="${NEW_ZONE}">+ Add zone…</option>`);
+    state.savedZones = saved;
   }
 
   async function onZoneChange() {
-    if (!confirmDiscard()) { byId('li_zone').value = state.line?.zone || ''; return; }
-    const service = byId('li_service').value, seq = composedSeq();
+    if (!confirmDiscard()) return revertTo('li_zone', state.zone);
     let zone = byId('li_zone').value;
     if (zone === NEW_ZONE) {
       const typed = (prompt('New zone for this line (1–3 letters or digits, e.g. B):') || '').trim().toUpperCase();
       if (!/^[A-Z0-9]{1,3}$/.test(typed)) {
-        byId('li_zone').value = '';
+        byId('li_zone').value = state.zone || '';
         if (typed) showToast('error', 'Invalid zone', 'Use 1–3 letters or digits, e.g. B');
-        clearSelection();
         return;
       }
       if (![...byId('li_zone').options].some(o => o.value === typed)) {
-        byId('li_zone').querySelector(`option[value="${NEW_ZONE}"]`).insertAdjacentHTML('beforebegin', `<option value="${typed}">${typed}</option>`);
+        byId('li_zone').querySelector(`option[value="${NEW_ZONE}"]`).insertAdjacentHTML('beforebegin', `<option value="${typed}">${typed}  (new)</option>`);
       }
       byId('li_zone').value = zone = typed;
     }
-    if (!zone) { clearSelection(); return; }
+    await openZone(zone);
+  }
+
+  // Load a saved zone (header + rows) or start a new, unsaved one
+  async function openZone(zone) {
+    state.zone = zone || '';
+    state.zoneRec = null; state.rows = []; state.extracted = []; state.undo = []; state.selectedId = null;
+    const saved = zone && (state.savedZones || []).find(z => z.zone === zone);
     try {
-      const line = await DataStore.resolveLine(service, seq, zone);
-      if (!line) { showToast('error', 'Could not open line', 'Not found in the line list or the uploaded P&IDs'); return; }
-      const known = allLines.findIndex(x => x.id === line.id);
-      if (known >= 0) allLines[known] = { ...allLines[known], ...line }; else allLines.push(line);
-      await loadLine(line);
+      if (saved) {
+        const full = await DataStore.getLineZone(saved.id);
+        state.zoneRec = full.zone;
+        state.lineData = full.line || state.lineData;
+        state.rows = (full[cfg.kind] || []).map(r => ({ ...r }));
+        state.extracted = full.extracted || [];
+      }
     } catch (err) {
-      showToast('error', 'Could not open line', err.message);
+      showToast('error', 'Could not open zone', err.message);
     }
+    fillHeader();
+    markSaved(!!state.zoneRec);
+    if (cfg.drivesShared) {
+      document.getElementById('selectedLineStat').innerHTML = state.zone
+        ? `<i class="ti ti-point-filled" style="font-size:8px;color:var(--color-accent-strong)"></i> ${escAttr(state.lineData.lineNo)} · Zone ${escAttr(state.zone)}`
+        : 'No line selected';
+      renderSummaryTable(document.getElementById('summarySearch').value);
+    }
+    refresh();
   }
 
-  function resetBelow(level) {
-    if (level === 'seq') {
-      fillSelect(byId('li_subline'), [], 'Select…'); byId('li_subline').disabled = true;
-    }
+  function resetFrom(level) {
+    if (level === 'subline') { fillSelect(byId('li_subline'), [], 'Select…'); byId('li_subline').disabled = true; }
     fillSelect(byId('li_zone'), [], 'Select…'); byId('li_zone').disabled = true;
-    clearSelection();
+    state.lineData = null; state.zone = ''; state.zoneRec = null; state.savedZones = [];
+    state.rows = []; state.extracted = []; state.undo = []; state.selectedId = null; state.dirty = false;
+    byId('mtoTitle').textContent = cfg.key === 'dumpcheck' ? 'MTO from Dump Check' : 'Manual MTO';
+    fillHeader();
+    markSaved(false);
+    if (cfg.drivesShared) document.getElementById('selectedLineStat').textContent = 'No line selected';
+    refresh();
   }
 
-  async function syncDropdownsToLine(line) {
-    const { lsr, subline } = splitSeqNo(line.seqNo);
-    byId('li_service').value = line.service;
-    fillSelect(byId('li_seq'), await DataStore.getSequences(line.service), 'Select…');
-    byId('li_seq').disabled = false; byId('li_seq').value = lsr;
-    const subs = (await DataStore.getSublines(line.service, lsr)).map(s => s || SUBLINE_NONE);
-    fillSelect(byId('li_subline'), subs, 'Select…', { [SUBLINE_NONE]: '— (none)' });
-    byId('li_subline').disabled = false; byId('li_subline').value = subline || SUBLINE_NONE;
-    fillZones(await DataStore.getZones(line.service, line.seqNo));
-    byId('li_zone').disabled = false; byId('li_zone').value = line.zone;
-  }
-
+  // From the summary table / << < > >>: open a saved zone
   async function selectLine(id) {
-    if (id === state.activeLineId) return;
+    if (id === state.zoneRec?.id) return;
     if (!confirmDiscard()) return;
-    const line = allLines.find(x => x.id === id);
-    if (!line) return;
+    const z = allLines.find(x => x.id === id);
+    if (!z) return;
     try {
-      await syncDropdownsToLine(line);
-      await loadLine(line);
+      byId('li_service').value = z.service;
+      fillSelect(byId('li_seq'), await DataStore.getLsrNos(z.service), 'Select…');
+      byId('li_seq').disabled = false; byId('li_seq').value = z.lsrNo;
+      const subs = (await DataStore.getSublines(z.service, z.lsrNo)).map(s => s || SUBLINE_NONE);
+      fillSelect(byId('li_subline'), subs, 'Select…', { [SUBLINE_NONE]: '— (none)' });
+      byId('li_subline').disabled = false; byId('li_subline').value = z.sublineNo || SUBLINE_NONE;
+      state.dirty = false;
+      if (!(await showLine(z.service, z.lsrNo, z.sublineNo))) return;
+      byId('li_zone').value = z.zone;
+      await openZone(z.zone);
     } catch (err) {
       showToast('error', 'Could not open line', err.message);
     }
@@ -460,87 +493,59 @@ function createMtoController(cfg) {
 
   /* ── COSMAS line header ── */
   // Values from the line list / P&ID, shown until the engineer types something else
-  function headerDefaults(line) {
+  function headerDefaults() {
+    const d = state.lineData || {};
     return {
-      pipingClass: line.pipingSpec, insType: line.insulationType,
-      oprTemp1: line.opTemp, oprTemp2: line.opTemp2, desTemp1: line.designTemp, desTemp2: line.designTemp2,
+      pipingClass: d.pipingSpec, insType: d.insulationType,
+      oprTemp1: d.opTemp, oprTemp2: d.opTemp2, desTemp1: d.designTemp, desTemp2: d.designTemp2,
     };
   }
 
-  function fillHeader(line) {
-    const saved = (line && line.cosmas) || {};
-    const defaults = line ? headerDefaults(line) : {};
+  function fillHeader() {
+    const has = !!state.lineData;
+    const saved = state.zoneRec || {};
+    const defaults = headerDefaults();
     COSMAS_KEYS.forEach(k => {
       const input = byId('cos_' + k);
-      input.value = saved[k] ?? defaults[k] ?? '';
-      input.disabled = !line;
+      input.value = (has && (saved[k] ?? defaults[k])) || '';
+      input.disabled = !has;
       input.classList.toggle('cos-overridden', !!saved[k] && defaults[k] != null && saved[k] !== defaults[k]);
       input.title = defaults[k] ? `From line list / P&ID: ${defaults[k]}` : '';
     });
     const bolt = byId('cos_boltTensioning');
-    bolt.checked = !!saved.boltTensioning; bolt.disabled = !line;
+    bolt.checked = !!saved.boltTensioning; bolt.disabled = !has;
     renderHeaderStatus();
   }
 
+  // Only what differs from the line list / P&ID is stored
   function readHeader() {
-    const defaults = headerDefaults(state.line);
+    const defaults = headerDefaults();
     const out = {};
     COSMAS_KEYS.forEach(k => {
       const v = byId('cos_' + k).value.trim();
-      if (v && v !== (defaults[k] || '')) out[k] = v;   // store only what differs from the source
+      if (v && v !== (defaults[k] || '')) out[k] = v;
     });
-    if (byId('cos_boltTensioning').checked) out.boltTensioning = true;
+    out.boltTensioning = byId('cos_boltTensioning').checked;
     return out;
   }
 
   function renderHeaderStatus() {
-    const line = state.line;
+    const d = state.lineData;
     const statusEl = byId('ld_status');
-    statusEl.textContent = `LINE STATUS : ${line ? LINE_STATUS_TEXT[line.status] || line.status : '—'}`;
-    const SOURCE_LABELS = { line_list: 'Line list', pid: 'P&ID only', 'line_list+pid': 'Line list + P&ID', 'pid+parent_line': 'P&ID sub-line (P&T from parent line)' };
-    statusEl.title = line ? [
-      `Line No: ${line.lineNo}`,
-      `Source: ${SOURCE_LABELS[line.source] || line.source}`,
-      line.pidNo && `P&ID: ${line.pidNo}`,
-      line.dataMismatch && `Differs: ${line.dataMismatch}`,
+    const status = state.zoneRec ? LINE_STATUS_TEXT[state.zoneRec.status] : d && state.zone ? 'New (not saved)' : '—';
+    statusEl.textContent = `LINE STATUS : ${status}`;
+    statusEl.title = d ? [
+      `Line No: ${d.lineNo}`,
+      `Source: ${SOURCE_LABELS[d.source] || d.source}`,
+      d.pidNo && `P&ID: ${d.pidNo}`,
+      d.dataMismatch && `Differs: ${d.dataMismatch}`,
+      state.zoneRec && `Saved by ${state.zoneRec.updatedBy} on ${new Date(state.zoneRec.updatedAt).toLocaleString()}`,
     ].filter(Boolean).join('\n') : '';
     // Contr_Code + service + unit + lsrno + subline + dwg.indicator + area no
-    if (!line) { byId('ld_lineKey').textContent = '—'; return; }
-    const { lsr, subline } = splitSeqNo(line.seqNo);
-    byId('ld_lineKey').textContent = [
-      byId('cos_contrCode').value.trim(), line.service, line.unitNo, lsr, subline,
+    byId('ld_lineKey').textContent = d ? [
+      byId('cos_contrCode').value.trim(), d.service, d.unitNo, d.lsrNo, d.sublineNo,
       byId('cos_drgIndicator').value, byId('cos_drgAreaNo').value.trim(),
-    ].join('') || '—';
-  }
-
-  /* ── Load / clear a line ── */
-  async function loadLine(line) {
-    state.activeLineId = line.id;
-    state.line = line;
-    fillHeader(line);
-    byId('mtoTitle').textContent = (cfg.key === 'dumpcheck' ? 'MTO from Dump Check — ' : 'Manual MTO — ') + line.lineNo;
-
-    if (cfg.drivesShared) {
-      document.getElementById('selectedLineStat').innerHTML =
-        `<i class="ti ti-point-filled" style="font-size:8px;color:var(--color-accent-strong)"></i> ${line.lineNo}`;
-      renderSummaryTable(document.getElementById('summarySearch').value);
-    }
-
-    const [items, extracted] = await Promise.all([cfg.api.getItems(line.id), DataStore.getExtractedItems(line.id)]);
-    state.rows = items.map(r => ({ ...r }));
-    state.extracted = extracted;
-    state.deleted = []; state.undo = []; state.selectedId = null;
-    markSaved();
-    refresh();
-  }
-
-  function clearSelection() {
-    state.activeLineId = null; state.line = null;
-    state.rows = []; state.deleted = []; state.extracted = []; state.undo = []; state.selectedId = null;
-    state.dirty = false;
-    fillHeader(null);
-    if (cfg.drivesShared) document.getElementById('selectedLineStat').textContent = 'No line selected';
-    refresh();
+    ].join('') : '—';
   }
 
   function confirmDiscard() {
@@ -589,8 +594,12 @@ function createMtoController(cfg) {
 
   function renderRows(itemStatus) {
     const wrap = byId('mtoTableWrap'), empty = byId('emptyState'), summaryBar = byId('mtoSummary');
-    if (!state.activeLineId) {
+    if (!state.lineData || !state.zone) {
       wrap.style.display = 'none'; empty.style.display = 'flex'; summaryBar.style.display = 'none';
+      empty.querySelector('.empty-msg').textContent = state.lineData ? 'Choose a zone' : 'No line selected';
+      empty.querySelector('.empty-sub').textContent = state.lineData
+        ? 'Pick a zone (or + Add zone…) to enter MTO for this line'
+        : 'Choose Service, LSR NO and Subline No. above to see the line';
       byId('itemCountBadge').textContent = '0 items';
       return;
     }
@@ -626,12 +635,12 @@ function createMtoController(cfg) {
 
   function renderExtracted(extractedStatus) {
     const wrap = byId('extractedTableWrap'), empty = byId('extractedEmptyState');
-    if (!state.activeLineId || !state.extracted.length) {
+    if (!state.zone || !state.extracted.length) {
       wrap.style.display = 'none'; empty.style.display = 'flex';
       empty.querySelector('.empty-msg').textContent = 'No extraction available';
-      empty.querySelector('.empty-sub').textContent = state.activeLineId
+      empty.querySelector('.empty-sub').textContent = state.zone
         ? 'This line has no Smart P&ID extraction yet'
-        : 'Select a line to view its Smart P&ID extracted quantities';
+        : 'Select a line and zone to view its Smart P&ID extracted quantities';
       byId('extractedCountBadge').textContent = '0 items';
       return;
     }
@@ -651,12 +660,14 @@ function createMtoController(cfg) {
     renderSummary(cmp);
     renderRows(cmp.itemStatus);
     renderExtracted(cmp.extractedStatus);
+    renderHeaderStatus();
   }
 
   /* ── Row editing (local until Save) ── */
-  function requireLine() {
-    if (state.activeLineId) return true;
-    showToast('error', 'No line selected', 'Choose Service, LSR NO, Subline No. and Zone first');
+  function requireZone() {
+    if (state.lineData && state.zone) return true;
+    showToast('error', state.lineData ? 'Choose a zone' : 'No line selected',
+      state.lineData ? 'Pick a zone (or + Add zone…) first' : 'Choose Service, LSR NO and Subline No. first');
     return false;
   }
   const findRow = (id) => state.rows.find(r => r.id === id);
@@ -664,9 +675,9 @@ function createMtoController(cfg) {
   function pushUndo(entry) { state.undo.push(entry); if (state.undo.length > 50) state.undo.shift(); }
 
   function insertRow(fields = {}, afterId = null) {
-    if (!requireLine()) return;
+    if (!requireZone()) return;
     const row = {
-      id: tmpId--, pipingClass: byId('cos_pipingClass').value.trim() || state.line.pipingSpec || '',
+      id: tmpId--, pipingClass: byId('cos_pipingClass').value.trim() || state.lineData.pipingSpec || '',
       inputCode: '', itemCode: '', dia1: '', dia2: '', qty: 1, ...fields,
     };
     const idx = afterId == null ? state.rows.length : state.rows.findIndex(r => r.id === afterId) + 1;
@@ -679,18 +690,17 @@ function createMtoController(cfg) {
   }
 
   function duplicateRow() {
-    if (!requireLine()) return;
+    if (!requireZone()) return;
     const r = findRow(state.selectedId);
     if (!r) { showToast('error', 'Select a row first', 'Click a row, then Duplicate'); return; }
     insertRow(snapshot(r), r.id);
   }
 
   function deleteRow(id = state.selectedId) {
-    if (!requireLine()) return;
+    if (!requireZone()) return;
     const idx = state.rows.findIndex(r => r.id === id);
     if (idx < 0) { showToast('error', 'Select a row first', 'Click a row, then Delete Line'); return; }
     const [row] = state.rows.splice(idx, 1);
-    if (row.id > 0) state.deleted.push(row.id);
     pushUndo({ type: 'delete', row, idx });
     state.selectedId = null;
     markUnsaved(); refresh();
@@ -732,43 +742,37 @@ function createMtoController(cfg) {
     const u = state.undo.pop();
     if (!u) { showToast('info', 'Nothing to undo', ''); return; }
     if (u.type === 'insert') state.rows = state.rows.filter(r => r.id !== u.id);
-    if (u.type === 'delete') {
-      state.rows.splice(u.idx, 0, u.row);
-      state.deleted = state.deleted.filter(id => id !== u.row.id);
-    }
+    if (u.type === 'delete') state.rows.splice(u.idx, 0, u.row);
     if (u.type === 'edit') { const r = findRow(u.id); if (r) { r[u.field] = u.before; if (r.id > 0) r._dirty = true; } }
-    if (u.type === 'header') { byId('cos_' + u.key).value = u.before; renderHeaderStatus(); }
+    if (u.type === 'header') { byId('cos_' + u.key).value = u.before; }
     if (u.type === 'headerCheck') { byId('cos_boltTensioning').checked = u.before; }
     markUnsaved(); refresh();
   }
 
-  /* ── Save: rows, header, line status ── */
+  /* ── Save: line + zone, COSMAS header and this tab's rows → mto_line_zones ── */
   async function save() {
-    if (!requireLine()) return;
+    if (!requireZone()) return;
     const btn = byId('saveBtn'); btn.disabled = true;
     try {
-      for (const id of state.deleted) await cfg.api.deleteItem(id);
-      for (const r of state.rows) {
-        if (r.id < 0) await cfg.api.addItem(state.activeLineId, snapshot(r));
-        else if (r._dirty) await cfg.api.updateItem(r.id, snapshot(r));
-      }
-      const updatedLine = await DataStore.saveLineCosmas(state.activeLineId, readHeader());
-      Object.assign(state.line, updatedLine);
-
-      if (cfg.drivesShared) {
-        const count = state.rows.length;
-        const status = count ? (state.line.status === 'complete' ? 'complete' : 'inprogress') : 'pending';
-        Object.assign(state.line, await DataStore.setLineStatus(state.activeLineId, status, count));
-      }
-      const known = allLines.find(x => x.id === state.activeLineId);
-      if (known) Object.assign(known, state.line);
+      const d = state.lineData;
+      const full = await DataStore.saveLineZone({
+        service: d.service, lsrNo: d.lsrNo, sublineNo: d.sublineNo, zone: state.zone,
+        header: readHeader(), kind: cfg.kind, rows: state.rows.map(snapshot),
+      });
+      state.zoneRec = full.zone;
+      state.lineData = full.line || d;
+      state.rows = (full[cfg.kind] || []).map(r => ({ ...r }));
+      state.extracted = full.extracted || [];
+      state.undo = []; state.selectedId = null;
+      allLines = await loadAllLines();
+      const keepZone = state.zone;
+      await fillZones();
+      byId('li_zone').value = keepZone;
+      fillHeader();
+      markSaved(true); refresh();
       if (cfg.drivesShared) renderSummaryTable(document.getElementById('summarySearch').value);
-
-      state.rows = (await cfg.api.getItems(state.activeLineId)).map(r => ({ ...r }));
-      state.deleted = []; state.undo = []; state.selectedId = null;
-      fillHeader(state.line);
-      markSaved(); refresh();
-      showToast('success', 'Saved', `${state.rows.length} row(s) saved for ${state.line.lineNo}`);
+      if (cfg.onSaved) cfg.onSaved(full);
+      showToast('success', 'Saved', `${state.rows.length} row(s) · ${d.lineNo} · Zone ${keepZone}`);
     } catch (err) {
       showToast('error', 'Could not save', err.message);
     } finally {
@@ -776,42 +780,45 @@ function createMtoController(cfg) {
     }
   }
 
+  // The other tab saved the same line + zone: take its header (rows are per tab)
+  function zoneSavedElsewhere(full) {
+    if (!state.zoneRec && !(state.lineData && state.zone)) return;
+    const z = full.zone, d = state.lineData;
+    if (!d || d.service !== z.service || d.lsrNo !== z.lsrNo || d.sublineNo !== z.sublineNo || state.zone !== z.zone) return;
+    state.zoneRec = z;
+    if (!state.dirty) fillHeader();
+    renderHeaderStatus();
+  }
+
   function markUnsaved() {
     state.dirty = true;
     byId('unsavedBadge').style.display = 'inline-flex';
     byId('savedBadge').style.display = 'none';
   }
-  function markSaved() {
+  function markSaved(isSaved) {
     state.dirty = false;
     byId('unsavedBadge').style.display = 'none';
-    byId('savedBadge').style.display = 'inline-flex';
+    byId('savedBadge').style.display = isSaved ? 'inline-flex' : 'none';
   }
 
-  /* ── << < > >> : step through the lines opened for this job/unit ── */
-  function orderedLines() {
-    return [...allLines].sort((a, b) =>
-      String(a.service).localeCompare(String(b.service)) ||
-      String(a.seqNo).localeCompare(String(b.seqNo), undefined, { numeric: true }) ||
-      String(a.zone).localeCompare(String(b.zone)));
-  }
+  /* ── << < > >> : step through the saved line + zones of this unit ── */
   function navigate(where) {
-    const list = orderedLines();
-    if (!list.length) { showToast('info', 'No lines yet', 'Open a line with the selectors first'); return; }
-    const i = list.findIndex(l => l.id === state.activeLineId);
+    const list = allLines;   // already ordered service, LSR, subline, zone
+    if (!list.length) { showToast('info', 'Nothing saved yet', 'Save a line + zone first'); return; }
+    const i = list.findIndex(l => l.id === state.zoneRec?.id);
     const target = { first: 0, last: list.length - 1, prev: i <= 0 ? 0 : i - 1, next: i < 0 ? 0 : Math.min(i + 1, list.length - 1) }[where];
-    if (list[target].id !== state.activeLineId) selectLine(list[target].id);
+    if (list[target].id !== state.zoneRec?.id) selectLine(list[target].id);
   }
 
   /* ── Export Line Data to Excel (CSV, opens in Excel) ── */
   function exportLine() {
-    if (!requireLine()) return;
+    if (!requireZone()) return;
     const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const head = readHeader(), defaults = headerDefaults(state.line);
-    const { lsr, subline } = splitSeqNo(state.line.seqNo);
+    const d = state.lineData;
     const lines = [
-      ['Line Key', byId('ld_lineKey').textContent], ['Line No', state.line.lineNo],
-      ['Service', state.line.service], ['Unit', state.line.unitNo], ['LSR NO', lsr], ['Subline No.', subline], ['Zone', state.line.zone],
-      ...COSMAS_KEYS.map(k => [byId('cos_' + k).closest('.field').querySelector('.field-label').textContent, head[k] ?? defaults[k] ?? '']),
+      ['Line Key', byId('ld_lineKey').textContent], ['Line No', d.lineNo],
+      ['Service', d.service], ['Unit', d.unitNo], ['LSR NO', d.lsrNo], ['Subline No.', d.sublineNo], ['Zone', state.zone],
+      ...COSMAS_KEYS.map(k => [byId('cos_' + k).closest('.field').querySelector('.field-label').textContent, byId('cos_' + k).value]),
       ['Bolt Tensioning Required', byId('cos_boltTensioning').checked ? 'Yes' : 'No'],
       [],
       ['Piping Class', 'Input Code', 'Item Code', 'Dia1', 'Dia2', 'Qty', 'Err'],
@@ -820,16 +827,19 @@ function createMtoController(cfg) {
     const csv = '﻿' + lines.map(row => row.map(q).join(',')).join('\r\n');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-    a.download = `${state.line.lineNo.replace(/[^\w.-]+/g, '_')}_${state.line.zone}_BoM.csv`;
+    a.download = `${d.lineNo.replace(/[^\w.-]+/g, '_')}_${state.zone}_BoM.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
   }
 
   async function openPidViewer() {
-    if (!requireLine()) return;
+    if (!state.lineData) { showToast('error', 'No line selected', 'Choose Service, LSR NO and Subline No. first'); return; }
+    const d = state.lineData;
     try {
-      const doc = await DataStore.getPidDocumentForLine(state.activeLineId);
-      window.open(`pid-viewer.html?doc=${doc.masterIndexId}&line=${state.activeLineId}`, 'ipmcs_pid_viewer_' + cfg.key, 'width=1100,height=800');
+      const doc = await DataStore.getPidDocumentForLine(d.service, d.lsrNo, d.sublineNo);
+      const qs = new URLSearchParams({ doc: doc.masterIndexId, lineNo: d.lineNo });
+      if (state.zone) qs.set('zone', state.zone);
+      window.open(`pid-viewer.html?${qs}`, 'ipmcs_pid_viewer_' + cfg.key, 'width=1100,height=800');
     } catch (err) {
       showToast('error', 'No P&ID available for this line', err.message);
     }
@@ -837,7 +847,7 @@ function createMtoController(cfg) {
 
   /* ── Wiring ── */
   byId('li_service').addEventListener('change', onServiceChange);
-  byId('li_seq').addEventListener('change', onSeqChange);
+  byId('li_seq').addEventListener('change', onLsrChange);
   byId('li_subline').addEventListener('change', onSublineChange);
   byId('li_zone').addEventListener('change', onZoneChange);
 
@@ -847,13 +857,14 @@ function createMtoController(cfg) {
     input.addEventListener('change', () => {
       pushUndo({ type: 'header', key: k, before: input.dataset.before ?? '' });
       input.dataset.before = input.value;
-      markUnsaved(); renderHeaderStatus();
+      if (state.zone) markUnsaved();
+      renderHeaderStatus();
     });
     input.addEventListener('input', renderHeaderStatus);
   });
   byId('cos_boltTensioning').addEventListener('change', (e) => {
     pushUndo({ type: 'headerCheck', before: !e.target.checked });
-    markUnsaved();
+    if (state.zone) markUnsaved();
   });
 
   const tbody = byId('mtoTbody');
@@ -891,22 +902,23 @@ function createMtoController(cfg) {
     btn.addEventListener('click', () => showToast('info', btn.dataset.label, 'Coming soon — this COSMAS function is not built yet'));
   });
 
-  fillHeader(null);
+  fillHeader();
+  refresh();
 
   const controller = {
     key: cfg.key,
     onlyLabel: cfg.onlyLabel,
-    get activeLineId() { return state.activeLineId; },
+    get activeLineId() { return state.zoneRec ? state.zoneRec.id : null; },
     get hasUnsavedChanges() { return state.dirty; },
-    populateServices, selectLine,
+    populateServices, selectLine, zoneSavedElsewhere,
     // Unit switched: start again from Service for the new unit
     resetForUnit: async () => {
       byId('li_service').value = '';
       fillSelect(byId('li_seq'), [], 'Select…'); byId('li_seq').disabled = true;
-      resetBelow('seq');
+      resetFrom('subline');
       await populateServices();
     },
-    // Model Dump / other callers adding a row to the open line
+    // Model Dump / other callers adding a row to the open zone
     addNewItem: async (fields) => { insertRow(fields); return findRow(state.selectedId); },
   };
   return controller;

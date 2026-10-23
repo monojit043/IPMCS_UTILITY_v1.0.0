@@ -20,7 +20,9 @@ let renderTask = null;
 window.addEventListener('DOMContentLoaded', async () => {
   const params = new URLSearchParams(location.search);
   docId = params.get('doc');
-  const lineId = Number(params.get('line'));
+  // Opened from a line's "Open & Highlight P&ID": its zone colours the strokes
+  const lineZone = params.get('zone');
+  if (lineZone) line = { zone: lineZone, lineNo: params.get('lineNo') || '' };
 
   const session = DataStore.getSession();
   myUserId = session ? session.id : null;
@@ -70,10 +72,6 @@ window.addEventListener('DOMContentLoaded', async () => {
     drawingStroke = null;
     drawAnnotations();
   });
-
-  if (lineId) {
-    try { line = await DataStore.getLine(lineId); } catch (err) { line = null; }
-  }
 
   if (!docId) {
     document.getElementById('pdfLoading').innerHTML =

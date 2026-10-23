@@ -22,7 +22,7 @@ router.delete(
 // line to the sheet it's drawn on, and streaming the actual PDF bytes.
 router.get('/pims/available', asyncHandler(pimsPidController.listAvailable));
 router.get('/pims-file/:masterIndexId', asyncHandler(pimsPidController.streamFile));
-router.get('/line/:lineId/document', asyncHandler(pimsPidController.getForLine));
+router.get('/line-document', asyncHandler(pimsPidController.getForLine));
 router.get('/documents/:masterIndexId', asyncHandler(pimsPidController.getOne));
 
 // :id here is a PIMS pid_master_index id (see pid_user_highlights.document_id).
