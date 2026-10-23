@@ -183,11 +183,11 @@
                 </div>
                 <div class="li-divider"></div>
                 <div class="li-col li-col-cosmas">
-                  <div class="li-col-title">Bill of Material (AFC) · <span id="ld_status">LINE STATUS : —</span></div>
-                  <div class="cos-key" id="ld_keyRow">
-                    <span class="ld-key">Line Key for COSMAS:</span>
-                    <span class="cos-key-formula">Contr_Code+service+unit+lsrno+subline+dwg.indicator+area no</span>
-                    <span class="ld-val" id="ld_lineKey">—</span>
+                  <div class="li-col-title cos-title">
+                    <span>Bill of Material (AFC) · <span id="ld_status">LINE STATUS : —</span></span>
+                    <span class="cos-key" id="ld_keyRow">Line Key for COSMAS
+                      <span class="cos-key-formula" title="Contr_Code+service+unit+lsrno+subline+dwg.indicator+area no">ⓘ</span>:
+                      <span class="ld-val" id="ld_lineKey">—</span></span>
                   </div>
                   <div class="cos-fields">
                     <div class="field">
@@ -211,12 +211,32 @@
                       <input type="text" data-cos="drgRevNo" id="cos_drgRevNo" />
                     </div>
                     <div class="field">
+                      <label class="field-label">Cleaning Code</label>
+                      <input type="text" data-cos="cleaningCode" id="cos_cleaningCode" />
+                    </div>
+                    <div class="field">
                       <label class="field-label">INS. Type</label>
                       <input type="text" data-cos="insType" id="cos_insType" />
                     </div>
                     <div class="field">
                       <label class="field-label">INS Extent</label>
                       <input type="text" data-cos="insExtent" id="cos_insExtent" />
+                    </div>
+                    <div class="field">
+                      <label class="field-label">INS Third Party</label>
+                      <input type="text" data-cos="insThirdParty" id="cos_insThirdParty" />
+                    </div>
+                    <div class="field">
+                      <label class="field-label">Paint Third Party</label>
+                      <input type="text" data-cos="paintThirdParty" id="cos_paintThirdParty" />
+                    </div>
+                    <div class="field">
+                      <label class="field-label">Batch No.</label>
+                      <input type="text" data-cos="batchNo" id="cos_batchNo" />
+                    </div>
+                    <div class="field">
+                      <label class="field-label">Batch REV No.</label>
+                      <input type="text" data-cos="batchRevNo" id="cos_batchRevNo" />
                     </div>
                     <div class="field">
                       <label class="field-label">OPR Temp 1</label>
@@ -234,27 +254,10 @@
                       <label class="field-label">Des Temp2</label>
                       <input type="text" data-cos="desTemp2" id="cos_desTemp2" />
                     </div>
-                    <div class="field">
-                      <label class="field-label">Batch No.</label>
-                      <input type="text" data-cos="batchNo" id="cos_batchNo" />
+                    <div class="field cos-span2">
+                      <label class="field-label">Bolt Tensioning</label>
+                      <label class="cos-check"><input type="checkbox" data-cos="boltTensioning" id="cos_boltTensioning"/> Required</label>
                     </div>
-                    <div class="field">
-                      <label class="field-label">Batch REV No.</label>
-                      <input type="text" data-cos="batchRevNo" id="cos_batchRevNo" />
-                    </div>
-                    <div class="field">
-                      <label class="field-label">Cleaning Code</label>
-                      <input type="text" data-cos="cleaningCode" id="cos_cleaningCode" />
-                    </div>
-                    <div class="field">
-                      <label class="field-label">INS Third Party</label>
-                      <input type="text" data-cos="insThirdParty" id="cos_insThirdParty" />
-                    </div>
-                    <div class="field">
-                      <label class="field-label">Paint Third Party</label>
-                      <input type="text" data-cos="paintThirdParty" id="cos_paintThirdParty" />
-                    </div>
-                    <label class="cos-check"><input type="checkbox" data-cos="boltTensioning" id="cos_boltTensioning"/> Bolt Tensioning Required</label>
                   </div>
                 </div>
               </div>
@@ -393,11 +396,11 @@
                 </div>
                 <div class="li-divider"></div>
                 <div class="li-col li-col-cosmas">
-                  <div class="li-col-title">Bill of Material (AFC) · <span id="dc_ld_status">LINE STATUS : —</span></div>
-                  <div class="cos-key" id="dc_ld_keyRow">
-                    <span class="ld-key">Line Key for COSMAS:</span>
-                    <span class="cos-key-formula">Contr_Code+service+unit+lsrno+subline+dwg.indicator+area no</span>
-                    <span class="ld-val" id="dc_ld_lineKey">—</span>
+                  <div class="li-col-title cos-title">
+                    <span>Bill of Material (AFC) · <span id="dc_ld_status">LINE STATUS : —</span></span>
+                    <span class="cos-key" id="dc_ld_keyRow">Line Key for COSMAS
+                      <span class="cos-key-formula" title="Contr_Code+service+unit+lsrno+subline+dwg.indicator+area no">ⓘ</span>:
+                      <span class="ld-val" id="dc_ld_lineKey">—</span></span>
                   </div>
                   <div class="cos-fields">
                     <div class="field">
@@ -421,12 +424,32 @@
                       <input type="text" data-cos="drgRevNo" id="dc_cos_drgRevNo" />
                     </div>
                     <div class="field">
+                      <label class="field-label">Cleaning Code</label>
+                      <input type="text" data-cos="cleaningCode" id="dc_cos_cleaningCode" />
+                    </div>
+                    <div class="field">
                       <label class="field-label">INS. Type</label>
                       <input type="text" data-cos="insType" id="dc_cos_insType" />
                     </div>
                     <div class="field">
                       <label class="field-label">INS Extent</label>
                       <input type="text" data-cos="insExtent" id="dc_cos_insExtent" />
+                    </div>
+                    <div class="field">
+                      <label class="field-label">INS Third Party</label>
+                      <input type="text" data-cos="insThirdParty" id="dc_cos_insThirdParty" />
+                    </div>
+                    <div class="field">
+                      <label class="field-label">Paint Third Party</label>
+                      <input type="text" data-cos="paintThirdParty" id="dc_cos_paintThirdParty" />
+                    </div>
+                    <div class="field">
+                      <label class="field-label">Batch No.</label>
+                      <input type="text" data-cos="batchNo" id="dc_cos_batchNo" />
+                    </div>
+                    <div class="field">
+                      <label class="field-label">Batch REV No.</label>
+                      <input type="text" data-cos="batchRevNo" id="dc_cos_batchRevNo" />
                     </div>
                     <div class="field">
                       <label class="field-label">OPR Temp 1</label>
@@ -444,27 +467,10 @@
                       <label class="field-label">Des Temp2</label>
                       <input type="text" data-cos="desTemp2" id="dc_cos_desTemp2" />
                     </div>
-                    <div class="field">
-                      <label class="field-label">Batch No.</label>
-                      <input type="text" data-cos="batchNo" id="dc_cos_batchNo" />
+                    <div class="field cos-span2">
+                      <label class="field-label">Bolt Tensioning</label>
+                      <label class="cos-check"><input type="checkbox" data-cos="boltTensioning" id="dc_cos_boltTensioning"/> Required</label>
                     </div>
-                    <div class="field">
-                      <label class="field-label">Batch REV No.</label>
-                      <input type="text" data-cos="batchRevNo" id="dc_cos_batchRevNo" />
-                    </div>
-                    <div class="field">
-                      <label class="field-label">Cleaning Code</label>
-                      <input type="text" data-cos="cleaningCode" id="dc_cos_cleaningCode" />
-                    </div>
-                    <div class="field">
-                      <label class="field-label">INS Third Party</label>
-                      <input type="text" data-cos="insThirdParty" id="dc_cos_insThirdParty" />
-                    </div>
-                    <div class="field">
-                      <label class="field-label">Paint Third Party</label>
-                      <input type="text" data-cos="paintThirdParty" id="dc_cos_paintThirdParty" />
-                    </div>
-                    <label class="cos-check"><input type="checkbox" data-cos="boltTensioning" id="dc_cos_boltTensioning"/> Bolt Tensioning Required</label>
                   </div>
                 </div>
               </div>

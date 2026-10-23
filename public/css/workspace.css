@@ -302,18 +302,32 @@ input.inline-input:focus { border-color: var(--color-accent); box-shadow: 0 0 0 
 .sb-stat { display: flex; align-items: center; gap: 5px; }
 .sb-r { margin-left: auto; display: flex; gap: 16px; }
 
-/* ── COSMAS Bill of Material content (same IPMCS look, COSMAS fields) ── */
-.li-col-select { flex: 0 0 32%; }
-.li-col-select .li-fields { grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); }
+/* ── COSMAS Bill of Material content (same IPMCS look, COSMAS fields) ──
+   Left: 2 columns × 3 rows; right: 6 columns × 3 rows — same box height
+   everywhere so the rows line up across the divider. */
+.line-info-panel { --cos-box-h: 28px; align-items: stretch; }
+.li-col-select { flex: 0 0 25%; }
+.li-col-select .li-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 8px; }
 .li-col-cosmas { flex: 1; }
-.cos-key { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
-.cos-key-formula { font-size: 10px; color: var(--text-faint); }
-.cos-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 4px 6px; align-items: end; }
-.cos-fields .field { gap: 2px; }
-.cos-fields .field-label { font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cos-fields input, .cos-fields select { padding: 4px 7px; font-size: 12px; min-height: 0; width: 100%; }
+.li-col-title { min-height: 14px; }
+.cos-title { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.cos-key { font-family: var(--font-body, inherit); text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 11px; color: var(--text-muted); }
+.cos-key .ld-val { font-size: 11px; margin-left: 2px; }
+.cos-key-formula { cursor: help; color: var(--text-faint); }
+.cos-fields { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px 8px; }
+.cos-span2 { grid-column: span 2; }
+.li-fields .field, .cos-fields .field { gap: 2px; min-width: 0; }
+.li-fields .field-label, .cos-fields .field-label { font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.line-info-panel select, .line-info-panel input[type="text"] {
+  height: var(--cos-box-h); min-height: 0; padding: 0 8px; font-size: 12px; width: 100%; box-sizing: border-box;
+}
+.line-info-panel select:disabled, .line-info-panel input:disabled { opacity: .55; cursor: not-allowed; }
 .cos-fields input.cos-overridden { border-color: var(--color-accent); }
-.cos-check { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-secondary); padding-bottom: 5px; }
+.cos-check {
+  height: var(--cos-box-h); display: flex; align-items: center; gap: 6px; padding: 0 8px; box-sizing: border-box;
+  border: 1px solid var(--color-border-strong); border-radius: var(--radius-md); background: var(--color-surface-raised);
+  font-size: 12px; color: var(--text-secondary); white-space: nowrap;
+}
 .mto-toolbar.cos-actions { height: auto; flex-wrap: wrap; padding: 4px 10px; }
 .cos-table td { padding-top: 2px; padding-bottom: 2px; }
 .cos-table input.inline-input { width: 100%; text-align: left; }
