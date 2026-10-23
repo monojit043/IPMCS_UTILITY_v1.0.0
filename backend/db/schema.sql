@@ -260,3 +260,27 @@ ALTER TABLE lines ALTER COLUMN size_in TYPE VARCHAR(60);
 ALTER TABLE lines ALTER COLUMN line_no TYPE VARCHAR(150);
 ALTER TABLE lines ALTER COLUMN piping_spec TYPE VARCHAR(40);
 ALTER TABLE lines ALTER COLUMN created_by TYPE VARCHAR(50);
+
+-- COSMAS Bill of Material layout (2026-10-23).
+-- Line header: OPR/Des Temp 2 = the line list's minimum operating / design
+-- temperature. Everything the engineer enters or overrides in the COSMAS
+-- header (Contr.Code, DRG indicator/area/rev, INS extent, batch, cleaning
+-- code, third parties, bolt tensioning, and any edited piping class / INS
+-- type / temperatures) is kept in `cosmas`, so re-opening a line — which
+-- refreshes the source columns — never overwrites what was typed.
+ALTER TABLE lines ADD COLUMN IF NOT EXISTS op_temp2 VARCHAR(30);
+ALTER TABLE lines ADD COLUMN IF NOT EXISTS design_temp2 VARCHAR(30);
+ALTER TABLE lines ADD COLUMN IF NOT EXISTS cosmas JSONB NOT NULL DEFAULT '{}';
+
+-- Item rows in COSMAS terms: Piping Class (spec) | Input Code | Item Code |
+-- Dia1 (size) | Dia2 | Qty. Description is no longer required.
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['mto_items', 'dump_items', 'extracted_items'] LOOP
+    EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS input_code VARCHAR(60)', t);
+    EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS item_code VARCHAR(60)', t);
+    EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS dia2 VARCHAR(20)', t);
+    EXECUTE format('ALTER TABLE %I ALTER COLUMN description DROP NOT NULL', t);
+  END LOOP;
+END $$;

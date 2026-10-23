@@ -8,6 +8,7 @@ const LINE_COLUMNS = `
   op_pressure AS "opPressure", op_temp AS "opTemp",
   design_pressure AS "designPressure", design_temp AS "designTemp",
   insulation_type AS "insulationType", insulation_thickness AS "insulationThickness",
+  op_temp2 AS "opTemp2", design_temp2 AS "designTemp2", cosmas,
   status, items_count AS items
 `;
 
@@ -47,15 +48,29 @@ async function getServices(jobNo, unitNo) {
   return rows.map((r) => r.service);
 }
 
+// COSMAS "LSR NO" — the line number without any sub-line (05341, 05341A)
 async function getSequences(jobNo, unitNo, service) {
   const { rows } = await queryEpulse(
     `SELECT line_no AS seq FROM line_list WHERE ${LL_SCOPE} AND service = $3 AND coalesce(line_no, '') <> ''
      UNION
-     SELECT ${PID_SEQ} ${PID_LINES} AND e.service = $3 AND coalesce(e.seq_no, '') <> ''
+     SELECT e.seq_no ${PID_LINES} AND e.service = $3 AND coalesce(e.seq_no, '') <> ''
      ORDER BY 1`,
     [jobNo, unitNo, service]
   );
   return rows.map((r) => r.seq);
+}
+
+// COSMAS "Subline No." for one LSR NO — the P&ID sub-lines (01, 02…), with
+// '' standing for the line itself when it exists without a sub-line.
+async function getSublines(jobNo, unitNo, service, seqNo) {
+  const { rows } = await queryEpulse(
+    `SELECT '' AS sub FROM line_list WHERE ${LL_SCOPE} AND service = $3 AND line_no = $4
+     UNION
+     SELECT coalesce(e.sub_line, '') ${PID_LINES} AND e.service = $3 AND e.seq_no = $4
+     ORDER BY 1`,
+    [jobNo, unitNo, service, seqNo]
+  );
+  return rows.map((r) => r.sub);
 }
 
 // Zones already in use for this line in IPMCS; "A" when it hasn't been
@@ -83,7 +98,8 @@ async function readSources(jobNo, unitNo, service, seqNo) {
     queryEpulse(
       `SELECT line_size, line_class, insulation, insulation_thickness, pid_no,
               oper_press, oper_press_unit, oper_temp, oper_temp_unit,
-              design_press, design_press_unit, design_temp, design_temp_unit
+              design_press, design_press_unit, design_temp, design_temp_unit,
+              min_operating_temp, min_operating_temp_unit, min_design_temp, min_design_temp_unit
        FROM line_list WHERE ${LL_SCOPE} AND service = $3 AND line_no = $4
        ORDER BY id LIMIT 1`,
       [jobNo, unitNo, service, base]
@@ -136,6 +152,8 @@ function mergeSources({ ll, pid, subLine }) {
     opTemp: combine(ll?.oper_temp, ll?.oper_temp_unit),
     designPressure: combine(ll?.design_press, ll?.design_press_unit),
     designTemp: combine(ll?.design_temp, ll?.design_temp_unit),
+    opTemp2: combine(ll?.min_operating_temp, ll?.min_operating_temp_unit),
+    designTemp2: combine(ll?.min_design_temp, ll?.min_design_temp_unit),
     insulationThickness: ll?.insulation_thickness || null,
   };
 }
@@ -180,27 +198,55 @@ async function resolveLine(jobNo, unitNo, service, seqNo, zone, empId) {
     `INSERT INTO lines (
        job_no, unit_no, zone, line_no, seq_no, size_in, service, piping_spec, source, created_by,
        op_pressure, op_temp, design_pressure, design_temp, insulation_type, insulation_thickness,
-       pid_no, data_mismatch
+       pid_no, data_mismatch, op_temp2, design_temp2
      )
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
      ON CONFLICT (job_no, unit_no, service, seq_no, zone)
      DO UPDATE SET line_no = EXCLUDED.line_no, piping_spec = EXCLUDED.piping_spec,
        size_in = EXCLUDED.size_in, source = EXCLUDED.source,
        op_pressure = EXCLUDED.op_pressure, op_temp = EXCLUDED.op_temp,
        design_pressure = EXCLUDED.design_pressure, design_temp = EXCLUDED.design_temp,
        insulation_type = EXCLUDED.insulation_type, insulation_thickness = EXCLUDED.insulation_thickness,
-       pid_no = EXCLUDED.pid_no, data_mismatch = EXCLUDED.data_mismatch
+       pid_no = EXCLUDED.pid_no, data_mismatch = EXCLUDED.data_mismatch,
+       op_temp2 = EXCLUDED.op_temp2, design_temp2 = EXCLUDED.design_temp2
      RETURNING ${LINE_COLUMNS}`,
     [
       jobNo, unitNo, z, lineNo, seqNo, m.size, service, m.spec, m.source, empId || null,
       m.opPressure, m.opTemp, m.designPressure, m.designTemp, m.insul, m.insulationThickness,
-      m.pidNo, m.mismatch,
+      m.pidNo, m.mismatch, m.opTemp2, m.designTemp2,
     ]
   );
   return rows[0];
 }
 
+// COSMAS line header — what the engineer entered / overrode. Unknown keys
+// are dropped; empty values are removed so the source value shows again.
+const COSMAS_TEXT = [
+  'contrCode', 'pipingClass', 'drgIndicator', 'drgAreaNo', 'drgRevNo',
+  'insType', 'insExtent', 'oprTemp1', 'oprTemp2', 'desTemp1', 'desTemp2',
+  'batchNo', 'batchRevNo', 'cleaningCode', 'insThirdParty', 'paintThirdParty',
+];
+function cleanCosmas(input = {}) {
+  const out = {};
+  for (const k of COSMAS_TEXT) {
+    const v = input[k] === undefined || input[k] === null ? '' : String(input[k]).trim().slice(0, 60);
+    if (v) out[k] = v;
+  }
+  if (input.drgIndicator && !/^[PIGS]$/i.test(String(input.drgIndicator).trim())) delete out.drgIndicator;
+  if (out.drgIndicator) out.drgIndicator = out.drgIndicator.toUpperCase();
+  if (input.boltTensioning === true) out.boltTensioning = true;
+  return out;
+}
+
+async function updateCosmas(id, fields) {
+  const { rows } = await query(
+    `UPDATE lines SET cosmas = $2 WHERE id = $1 RETURNING ${LINE_COLUMNS}`,
+    [id, JSON.stringify(cleanCosmas(fields))]
+  );
+  return rows[0] || null;
+}
+
 module.exports = {
-  getAllLines, getLineById, updateLineStatus,
-  getServices, getSequences, getZones, resolveLine, normalizeZone,
+  getAllLines, getLineById, updateLineStatus, updateCosmas,
+  getServices, getSequences, getSublines, getZones, resolveLine, normalizeZone,
 };

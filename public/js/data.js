@@ -185,6 +185,14 @@ const DataStore = (() => {
   function getSequences(service) {
     return apiFetch('/lines/meta/sequences' + qs({ service }));
   }
+  // COSMAS Subline No. for an LSR NO: P&ID sub-lines, '' = the line itself
+  function getSublines(service, seqNo) {
+    return apiFetch('/lines/meta/sublines' + qs({ service, seq: seqNo }));
+  }
+  // COSMAS line header (what the engineer entered / overrode)
+  function saveLineCosmas(lineId, fields) {
+    return apiFetch(`/lines/${lineId}/cosmas`, { method: 'PUT', body: JSON.stringify(fields) });
+  }
   function getZones(service, seqNo) {
     return apiFetch('/lines/meta/zones' + qs({ service, seq: seqNo }));
   }
@@ -203,8 +211,9 @@ const DataStore = (() => {
   function addMTOItem(lineId, item) {
     return apiFetch(`/lines/${lineId}/mto-items`, { method: 'POST', body: JSON.stringify(item) });
   }
-  function updateMTOItemQty(itemId, qty) {
-    return apiFetch(`/mto-items/${itemId}`, { method: 'PATCH', body: JSON.stringify({ qty }) });
+  // Partial update of a BoM row: pipingClass, inputCode, itemCode, dia1, dia2, qty
+  function updateMTOItem(itemId, fields) {
+    return apiFetch(`/mto-items/${itemId}`, { method: 'PATCH', body: JSON.stringify(fields) });
   }
   function deleteMTOItem(itemId) {
     return apiFetch(`/mto-items/${itemId}`, { method: 'DELETE' });
@@ -217,8 +226,8 @@ const DataStore = (() => {
   function addDumpItem(lineId, item) {
     return apiFetch(`/lines/${lineId}/dump-items`, { method: 'POST', body: JSON.stringify(item) });
   }
-  function updateDumpItemQty(itemId, qty) {
-    return apiFetch(`/dump-items/${itemId}`, { method: 'PATCH', body: JSON.stringify({ qty }) });
+  function updateDumpItem(itemId, fields) {
+    return apiFetch(`/dump-items/${itemId}`, { method: 'PATCH', body: JSON.stringify(fields) });
   }
   function deleteDumpItem(itemId) {
     return apiFetch(`/dump-items/${itemId}`, { method: 'DELETE' });
@@ -289,9 +298,9 @@ const DataStore = (() => {
   return {
     login, ssoLogin, logout, selectAssignment, getSession, clearSession, getPendingAssignment, clearPendingAssignment,
     getLines, getLine, setLineStatus,
-    getServices, getSequences, getZones, resolveLine,
-    getMTOItems, addMTOItem, updateMTOItemQty, deleteMTOItem,
-    getDumpItems, addDumpItem, updateDumpItemQty, deleteDumpItem,
+    getServices, getSequences, getSublines, getZones, resolveLine, saveLineCosmas,
+    getMTOItems, addMTOItem, updateMTOItem, deleteMTOItem,
+    getDumpItems, addDumpItem, updateDumpItem, deleteDumpItem,
     getExtractedItems,
     getPidFolders, createPidFolder, getPidDocuments,
     getAvailablePimsDocuments, addPidFolderSelection, removePidFolderSelection,

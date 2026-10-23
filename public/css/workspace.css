@@ -301,3 +301,23 @@ input.inline-input:focus { border-color: var(--color-accent); box-shadow: 0 0 0 
 }
 .sb-stat { display: flex; align-items: center; gap: 5px; }
 .sb-r { margin-left: auto; display: flex; gap: 16px; }
+
+/* ── COSMAS Bill of Material content (same IPMCS look, COSMAS fields) ── */
+.li-col-select { flex: 0 0 32%; }
+.li-col-select .li-fields { grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); }
+.li-col-cosmas { flex: 1; }
+.cos-key { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.cos-key-formula { font-size: 10px; color: var(--text-faint); }
+.cos-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 4px 6px; align-items: end; }
+.cos-fields .field { gap: 2px; }
+.cos-fields .field-label { font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cos-fields input, .cos-fields select { padding: 4px 7px; font-size: 12px; min-height: 0; width: 100%; }
+.cos-fields input.cos-overridden { border-color: var(--color-accent); }
+.cos-check { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-secondary); padding-bottom: 5px; }
+.mto-toolbar.cos-actions { height: auto; flex-wrap: wrap; padding: 4px 10px; }
+.cos-table td { padding-top: 2px; padding-bottom: 2px; }
+.cos-table input.inline-input { width: 100%; text-align: left; }
+.cos-table input.inline-input.num { text-align: right; }
+.cos-table tbody tr { cursor: pointer; }
+.cos-table tbody tr.row-dirty td:first-child { box-shadow: inset 3px 0 0 var(--color-warning); }
+.cos-err { color: var(--color-danger); font-weight: 700; text-align: center; }

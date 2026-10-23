@@ -42,56 +42,31 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   inputCtrl = createMtoController({
     key: 'input',
+    prefix: '',
     onlyLabel: 'Manual Only',
     drivesShared: true,
     api: {
       getItems: DataStore.getMTOItems, addItem: DataStore.addMTOItem,
-      updateQty: DataStore.updateMTOItemQty, deleteItem: DataStore.deleteMTOItem,
+      updateItem: DataStore.updateMTOItem, deleteItem: DataStore.deleteMTOItem,
     },
-    ids: {
-      service: 'li_service', seq: 'li_seq', zone: 'li_zone',
-      ldLineNo: 'ld_lineNo', ldPipingSpec: 'ld_pipingSpec', ldSize: 'ld_size',
-      ldSource: 'ld_source', ldCreatedBy: 'ld_createdBy', ldCreatedAt: 'ld_createdAt',
-      ldOpPressure: 'ld_opPressure', ldOpTemp: 'ld_opTemp',
-      ldDesignPressure: 'ld_designPressure', ldDesignTemp: 'ld_designTemp',
-      ldInsulationType: 'ld_insulationType', ldInsulationThickness: 'ld_insulationThickness',
-      lsMatched: 'lsMatched', lsMismatch: 'lsMismatch', lsOnly: 'lsManualOnly', lsExtractedOnly: 'lsExtractedOnly',
-      paneTitle: 'mtoTitle', itemCountBadge: 'itemCountBadge',
-      emptyState: 'emptyState', tableWrap: 'mtoTableWrap', tbody: 'mtoTbody',
-      summaryBar: 'mtoSummary', sumItems: 'sumItems', sumPipe: 'sumPipe', sumFit: 'sumFit', sumValves: 'sumValves',
-      unsavedBadge: 'unsavedBadge', savedBadge: 'savedBadge',
-      extractedCountBadge: 'extractedCountBadge', extractedEmptyState: 'extractedEmptyState',
-      extractedTableWrap: 'extractedTableWrap', extractedTbody: 'extractedTbody',
-      addItemBtn: 'addItemBtn', uploadBtn: 'uploadBtn', openPidBtn: 'openPidBtn',
-      exportBtn: 'exportBtn', saveBtn: 'saveBtn',
-    },
+    lsIds: { matched: 'lsMatched', mismatch: 'lsMismatch', only: 'lsManualOnly', extractedOnly: 'lsExtractedOnly' },
   });
 
   dumpCtrl = createMtoController({
     key: 'dumpcheck',
+    prefix: 'dc_',
     onlyLabel: 'Dump Only',
     drivesShared: false,
     api: {
       getItems: DataStore.getDumpItems, addItem: DataStore.addDumpItem,
-      updateQty: DataStore.updateDumpItemQty, deleteItem: DataStore.deleteDumpItem,
+      updateItem: DataStore.updateDumpItem, deleteItem: DataStore.deleteDumpItem,
     },
-    ids: {
-      service: 'dc_li_service', seq: 'dc_li_seq', zone: 'dc_li_zone',
-      ldLineNo: 'dc_ld_lineNo', ldPipingSpec: 'dc_ld_pipingSpec', ldSize: 'dc_ld_size',
-      ldSource: 'dc_ld_source', ldCreatedBy: 'dc_ld_createdBy', ldCreatedAt: 'dc_ld_createdAt',
-      ldOpPressure: 'dc_ld_opPressure', ldOpTemp: 'dc_ld_opTemp',
-      ldDesignPressure: 'dc_ld_designPressure', ldDesignTemp: 'dc_ld_designTemp',
-      ldInsulationType: 'dc_ld_insulationType', ldInsulationThickness: 'dc_ld_insulationThickness',
-      lsMatched: 'dc_lsMatched', lsMismatch: 'dc_lsMismatch', lsOnly: 'dc_lsManualOnly', lsExtractedOnly: 'dc_lsExtractedOnly',
-      paneTitle: 'dc_mtoTitle', itemCountBadge: 'dc_itemCountBadge',
-      emptyState: 'dc_emptyState', tableWrap: 'dc_mtoTableWrap', tbody: 'dc_mtoTbody',
-      summaryBar: 'dc_mtoSummary', sumItems: 'dc_sumItems', sumPipe: 'dc_sumPipe', sumFit: 'dc_sumFit', sumValves: 'dc_sumValves',
-      unsavedBadge: 'dc_unsavedBadge', savedBadge: 'dc_savedBadge',
-      extractedCountBadge: 'dc_extractedCountBadge', extractedEmptyState: 'dc_extractedEmptyState',
-      extractedTableWrap: 'dc_extractedTableWrap', extractedTbody: 'dc_extractedTbody',
-      addItemBtn: 'dc_addItemBtn', uploadBtn: 'dc_uploadBtn', openPidBtn: 'dc_openPidBtn',
-      exportBtn: 'dc_exportBtn', saveBtn: 'dc_saveBtn',
-    },
+    lsIds: { matched: 'lsMatched', mismatch: 'lsMismatch', only: 'lsManualOnly', extractedOnly: 'lsExtractedOnly' },
+  });
+
+  // Leaving with unsaved BoM edits asks first
+  window.addEventListener('beforeunload', (ev) => {
+    if (inputCtrl.hasUnsavedChanges || dumpCtrl.hasUnsavedChanges) { ev.preventDefault(); ev.returnValue = ''; }
   });
 
   try {
@@ -281,30 +256,78 @@ function renderSummaryTable(query) {
 
 /* ══════════════ MTO CONTROLLER FACTORY ══════════════
    Powers both "MTO Input" (manual items) and "MTO from Dump Check" (dump
-   items) tabs — same Line Information / Line Data / Line Summary / entry
-   table / SP P&ID comparison behavior, each with its own independent line
-   selection and item dataset. */
+   items) tabs with the COSMAS Bill of Material content: Line Information
+   (Service / Unit / LSR NO / Subline No. / Zone), the COSMAS line header,
+   and the BoM rows (Piping Class | Input Code | Item Code | Dia1 | Dia2 |
+   Qty | Err) beside the SP P&ID comparison. Each tab has its own line
+   selection and item dataset; `p` is the element-id prefix ('' or 'dc_').
+   Row edits, inserts and deletes stay local until Save (Undo works on them). */
+const COSMAS_KEYS = [
+  'contrCode', 'pipingClass', 'drgIndicator', 'drgAreaNo', 'drgRevNo',
+  'insType', 'insExtent', 'oprTemp1', 'oprTemp2', 'desTemp1', 'desTemp2',
+  'batchNo', 'batchRevNo', 'cleaningCode', 'insThirdParty', 'paintThirdParty',
+];
+const ROW_FIELDS = ['pipingClass', 'inputCode', 'itemCode', 'dia1', 'dia2', 'qty'];
+const LINE_STATUS_TEXT = { pending: 'Pending', inprogress: 'In Progress', complete: 'Complete' };
+
+function escAttr(v) {
+  return String(v ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+// LSR NO / Subline No. from a stored seq ("05341-01" → 05341 + 01; "05341A" stays whole)
+function splitSeqNo(seqNo) {
+  const m = String(seqNo || '').match(/^(.+?)-(\d{1,3})$/);
+  return m ? { lsr: m[1], subline: m[2] } : { lsr: String(seqNo || ''), subline: '' };
+}
+
 function createMtoController(cfg) {
-  const ids = cfg.ids;
-  const state = { activeLineId: null, items: [], extracted: [], line: null };
+  const p = cfg.prefix;
+  const byId = (name) => document.getElementById(p + name);
+  const state = {
+    activeLineId: null, line: null,
+    rows: [],          // working copy of the BoM rows (id < 0 = not saved yet)
+    deleted: [],       // saved rows removed since the last save
+    extracted: [],
+    selectedId: null,
+    undo: [],
+    dirty: false,
+  };
+  let tmpId = -1;
 
-  function el(key) { return document.getElementById(ids[key]); }
-
-  function fillSelect(id, values, placeholder) {
-    const sel = document.getElementById(id);
-    sel.innerHTML = `<option value="">${placeholder}</option>` + values.map(v => `<option value="${v}">${v}</option>`).join('');
+  /* ── Line Information: Service → LSR NO → Subline No. → Zone ── */
+  function fillSelect(sel, values, placeholder, labels = {}) {
+    sel.innerHTML = `<option value="">${placeholder}</option>` +
+      values.map(v => `<option value="${escAttr(v)}">${escAttr(labels[v] ?? v)}</option>`).join('');
   }
+  const SUBLINE_NONE = '__none__';   // the line itself, no sub-line
 
   async function populateServices() {
-    fillSelect(ids.service, await DataStore.getServices(), 'Select…');
+    fillSelect(byId('li_service'), await DataStore.getServices(), 'Select…');
   }
 
   async function onServiceChange() {
-    const service = el('service').value;
-    fillSelect(ids.seq, service ? await DataStore.getSequences(service) : [], 'Select…');
-    el('seq').disabled = !service;
-    fillSelect(ids.zone, [], 'Select…'); el('zone').disabled = true;
-    clearSelection();
+    if (!confirmDiscard()) { byId('li_service').value = state.line?.service || ''; return; }
+    const service = byId('li_service').value;
+    fillSelect(byId('li_seq'), service ? await DataStore.getSequences(service) : [], 'Select…');
+    byId('li_seq').disabled = !service;
+    resetBelow('seq');
+  }
+
+  async function onSeqChange() {
+    if (!confirmDiscard()) { byId('li_seq').value = splitSeqNo(state.line?.seqNo).lsr; return; }
+    const service = byId('li_service').value, lsr = byId('li_seq').value;
+    resetBelow('seq');
+    if (!lsr) return;
+    const subs = (await DataStore.getSublines(service, lsr)).map(s => s || SUBLINE_NONE);
+    fillSelect(byId('li_subline'), subs, 'Select…', { [SUBLINE_NONE]: '— (none)' });
+    byId('li_subline').disabled = false;
+    if (subs.length === 1) { byId('li_subline').value = subs[0]; await onSublineChange(); }
+  }
+
+  function composedSeq() {
+    const lsr = byId('li_seq').value, sub = byId('li_subline').value;
+    if (!lsr || !sub) return '';
+    return sub === SUBLINE_NONE ? lsr : `${lsr}-${sub}`;
   }
 
   // Zones aren't in the line list or the P&IDs — they're set here: the zones
@@ -312,55 +335,72 @@ function createMtoController(cfg) {
   // when a line is split between engineers.
   const NEW_ZONE = '__new__';
   function fillZones(zones) {
-    fillSelect(ids.zone, zones, 'Select…');
-    if (zones.length) el('zone').insertAdjacentHTML('beforeend', `<option value="${NEW_ZONE}">+ Add zone…</option>`);
+    fillSelect(byId('li_zone'), zones, 'Select…');
+    if (zones.length) byId('li_zone').insertAdjacentHTML('beforeend', `<option value="${NEW_ZONE}">+ Add zone…</option>`);
   }
 
-  async function onSeqChange() {
-    const service = el('service').value, seq = el('seq').value;
-    fillZones(seq ? await DataStore.getZones(service, seq) : []);
-    el('zone').disabled = !seq;
+  async function onSublineChange() {
+    if (!confirmDiscard()) { byId('li_subline').value = splitSeqNo(state.line?.seqNo).subline || SUBLINE_NONE; return; }
+    const seq = composedSeq();
+    fillZones(seq ? await DataStore.getZones(byId('li_service').value, seq) : []);
+    byId('li_zone').disabled = !seq;
     clearSelection();
   }
 
   async function onZoneChange() {
-    const service = el('service').value, seq = el('seq').value;
-    let zone = el('zone').value;
+    if (!confirmDiscard()) { byId('li_zone').value = state.line?.zone || ''; return; }
+    const service = byId('li_service').value, seq = composedSeq();
+    let zone = byId('li_zone').value;
     if (zone === NEW_ZONE) {
       const typed = (prompt('New zone for this line (1–3 letters or digits, e.g. B):') || '').trim().toUpperCase();
       if (!/^[A-Z0-9]{1,3}$/.test(typed)) {
-        el('zone').value = '';
+        byId('li_zone').value = '';
         if (typed) showToast('error', 'Invalid zone', 'Use 1–3 letters or digits, e.g. B');
         clearSelection();
         return;
       }
-      if (![...el('zone').options].some(o => o.value === typed)) {
-        el('zone').querySelector(`option[value="${NEW_ZONE}"]`).insertAdjacentHTML('beforebegin', `<option value="${typed}">${typed}</option>`);
+      if (![...byId('li_zone').options].some(o => o.value === typed)) {
+        byId('li_zone').querySelector(`option[value="${NEW_ZONE}"]`).insertAdjacentHTML('beforebegin', `<option value="${typed}">${typed}</option>`);
       }
-      el('zone').value = zone = typed;
+      byId('li_zone').value = zone = typed;
     }
     if (!zone) { clearSelection(); return; }
     try {
       const line = await DataStore.resolveLine(service, seq, zone);
-      if (line) await loadLine(line);
-      else showToast('error', 'Could not open line', 'Not found in the line list or the uploaded P&IDs');
+      if (!line) { showToast('error', 'Could not open line', 'Not found in the line list or the uploaded P&IDs'); return; }
+      const known = allLines.findIndex(x => x.id === line.id);
+      if (known >= 0) allLines[known] = { ...allLines[known], ...line }; else allLines.push(line);
+      await loadLine(line);
     } catch (err) {
       showToast('error', 'Could not open line', err.message);
     }
   }
 
+  function resetBelow(level) {
+    if (level === 'seq') {
+      fillSelect(byId('li_subline'), [], 'Select…'); byId('li_subline').disabled = true;
+    }
+    fillSelect(byId('li_zone'), [], 'Select…'); byId('li_zone').disabled = true;
+    clearSelection();
+  }
+
   async function syncDropdownsToLine(line) {
-    el('service').value = line.service;
-
-    fillSelect(ids.seq, await DataStore.getSequences(line.service), 'Select…');
-    el('seq').disabled = false; el('seq').value = line.seqNo;
-
+    const { lsr, subline } = splitSeqNo(line.seqNo);
+    byId('li_service').value = line.service;
+    fillSelect(byId('li_seq'), await DataStore.getSequences(line.service), 'Select…');
+    byId('li_seq').disabled = false; byId('li_seq').value = lsr;
+    const subs = (await DataStore.getSublines(line.service, lsr)).map(s => s || SUBLINE_NONE);
+    fillSelect(byId('li_subline'), subs, 'Select…', { [SUBLINE_NONE]: '— (none)' });
+    byId('li_subline').disabled = false; byId('li_subline').value = subline || SUBLINE_NONE;
     fillZones(await DataStore.getZones(line.service, line.seqNo));
-    el('zone').disabled = false; el('zone').value = line.zone;
+    byId('li_zone').disabled = false; byId('li_zone').value = line.zone;
   }
 
   async function selectLine(id) {
+    if (id === state.activeLineId) return;
+    if (!confirmDiscard()) return;
     const line = allLines.find(x => x.id === id);
+    if (!line) return;
     try {
       await syncDropdownsToLine(line);
       await loadLine(line);
@@ -369,26 +409,67 @@ function createMtoController(cfg) {
     }
   }
 
+  /* ── COSMAS line header ── */
+  // Values from the line list / P&ID, shown until the engineer types something else
+  function headerDefaults(line) {
+    return {
+      pipingClass: line.pipingSpec, insType: line.insulationType,
+      oprTemp1: line.opTemp, oprTemp2: line.opTemp2, desTemp1: line.designTemp, desTemp2: line.designTemp2,
+    };
+  }
+
+  function fillHeader(line) {
+    const saved = (line && line.cosmas) || {};
+    const defaults = line ? headerDefaults(line) : {};
+    COSMAS_KEYS.forEach(k => {
+      const input = byId('cos_' + k);
+      input.value = saved[k] ?? defaults[k] ?? '';
+      input.disabled = !line;
+      input.classList.toggle('cos-overridden', !!saved[k] && defaults[k] != null && saved[k] !== defaults[k]);
+      input.title = defaults[k] ? `From line list / P&ID: ${defaults[k]}` : '';
+    });
+    const bolt = byId('cos_boltTensioning');
+    bolt.checked = !!saved.boltTensioning; bolt.disabled = !line;
+    renderHeaderStatus();
+  }
+
+  function readHeader() {
+    const defaults = headerDefaults(state.line);
+    const out = {};
+    COSMAS_KEYS.forEach(k => {
+      const v = byId('cos_' + k).value.trim();
+      if (v && v !== (defaults[k] || '')) out[k] = v;   // store only what differs from the source
+    });
+    if (byId('cos_boltTensioning').checked) out.boltTensioning = true;
+    return out;
+  }
+
+  function renderHeaderStatus() {
+    const line = state.line;
+    const statusEl = byId('ld_status');
+    statusEl.textContent = `LINE STATUS : ${line ? LINE_STATUS_TEXT[line.status] || line.status : '—'}`;
+    const SOURCE_LABELS = { line_list: 'Line list', pid: 'P&ID only', 'line_list+pid': 'Line list + P&ID', 'pid+parent_line': 'P&ID sub-line (P&T from parent line)' };
+    statusEl.title = line ? [
+      `Line No: ${line.lineNo}`,
+      `Source: ${SOURCE_LABELS[line.source] || line.source}`,
+      line.pidNo && `P&ID: ${line.pidNo}`,
+      line.dataMismatch && `Differs: ${line.dataMismatch}`,
+    ].filter(Boolean).join('\n') : '';
+    // Contr_Code + service + unit + lsrno + subline + dwg.indicator + area no
+    if (!line) { byId('ld_lineKey').textContent = '—'; return; }
+    const { lsr, subline } = splitSeqNo(line.seqNo);
+    byId('ld_lineKey').textContent = [
+      byId('cos_contrCode').value.trim(), line.service, line.unitNo, lsr, subline,
+      byId('cos_drgIndicator').value, byId('cos_drgAreaNo').value.trim(),
+    ].join('') || '—';
+  }
+
+  /* ── Load / clear a line ── */
   async function loadLine(line) {
     state.activeLineId = line.id;
     state.line = line;
-
-    el('ldLineNo').textContent = line.lineNo || '—';
-    el('ldPipingSpec').textContent = line.pipingSpec || '—';
-    el('ldSize').textContent = line.sizeIn || '—';
-    // Where the data came from; hover shows the P&ID(s) and any line list ≠ P&ID differences
-    const SOURCE_LABELS = { line_list: 'Line list', pid: 'P&ID only', 'line_list+pid': 'Line list + P&ID', 'pid+parent_line': 'P&ID sub-line (P&T from parent line)' };
-    el('ldSource').textContent = (SOURCE_LABELS[line.source] || line.source || '—') + (line.dataMismatch ? ' ⚠' : '');
-    el('ldSource').title = [line.pidNo && `P&ID: ${line.pidNo}`, line.dataMismatch && `Differs: ${line.dataMismatch}`].filter(Boolean).join('\n');
-    el('ldCreatedBy').textContent = line.createdBy || '—';
-    el('ldCreatedAt').textContent = line.createdAt ? new Date(line.createdAt).toLocaleDateString() : '—';
-    el('ldOpPressure').textContent = line.opPressure || '—';
-    el('ldOpTemp').textContent = line.opTemp || '—';
-    el('ldDesignPressure').textContent = line.designPressure || '—';
-    el('ldDesignTemp').textContent = line.designTemp || '—';
-    el('ldInsulationType').textContent = line.insulationType || '—';
-    el('ldInsulationThickness').textContent = line.insulationThickness || '—';
-    el('paneTitle').textContent = (cfg.key === 'dumpcheck' ? 'MTO from Dump Check — ' : 'Manual MTO — ') + line.lineNo;
+    fillHeader(line);
+    byId('mtoTitle').textContent = (cfg.key === 'dumpcheck' ? 'MTO from Dump Check — ' : 'Manual MTO — ') + line.lineNo;
 
     if (cfg.drivesShared) {
       document.getElementById('selectedLineStat').innerHTML =
@@ -396,277 +477,381 @@ function createMtoController(cfg) {
       renderSummaryTable(document.getElementById('summarySearch').value);
     }
 
-    [state.items, state.extracted] = await Promise.all([
-      cfg.api.getItems(line.id),
-      DataStore.getExtractedItems(line.id),
-    ]);
-
+    const [items, extracted] = await Promise.all([cfg.api.getItems(line.id), DataStore.getExtractedItems(line.id)]);
+    state.rows = items.map(r => ({ ...r }));
+    state.extracted = extracted;
+    state.deleted = []; state.undo = []; state.selectedId = null;
     markSaved();
     refresh();
   }
 
   function clearSelection() {
-    state.activeLineId = null;
-    state.items = [];
-    state.extracted = [];
-    state.line = null;
-    [ids.ldLineNo, ids.ldPipingSpec, ids.ldSize, ids.ldSource, ids.ldCreatedBy, ids.ldCreatedAt,
-     ids.ldOpPressure, ids.ldOpTemp, ids.ldDesignPressure, ids.ldDesignTemp, ids.ldInsulationType, ids.ldInsulationThickness]
-      .forEach(id => { document.getElementById(id).textContent = '—'; });
-    if (cfg.drivesShared) {
-      document.getElementById('selectedLineStat').textContent = 'No line selected';
-    }
+    state.activeLineId = null; state.line = null;
+    state.rows = []; state.deleted = []; state.extracted = []; state.undo = []; state.selectedId = null;
+    state.dirty = false;
+    fillHeader(null);
+    if (cfg.drivesShared) document.getElementById('selectedLineStat').textContent = 'No line selected';
     refresh();
   }
 
-  function itemKey(item) {
-    return [item.desc, item.size, item.spec, item.sch, item.unit].join('|').toLowerCase();
+  function confirmDiscard() {
+    return !state.dirty || confirm('This line has unsaved changes. Discard them?');
+  }
+
+  /* ── BoM rows ── */
+  function rowErrors(r) {
+    const errs = [];
+    if (!r.pipingClass) errs.push('Piping Class missing');
+    if (!r.inputCode && !r.itemCode) errs.push('Input Code or Item Code required');
+    if (!r.dia1) errs.push('Dia1 missing');
+    if (!(parseFloat(r.qty) > 0)) errs.push('Qty must be more than 0');
+    return errs;
+  }
+
+  function itemKey(r) {
+    return [r.pipingClass, r.inputCode, r.itemCode, r.dia1, r.dia2].map(v => String(v || '').trim()).join('|').toLowerCase();
   }
 
   function computeComparison() {
-    const extractedByKey = new Map();
-    state.extracted.forEach(e => extractedByKey.set(itemKey(e), e));
-    const itemsByKey = new Map();
-    state.items.forEach(m => itemsByKey.set(itemKey(m), m));
-
-    const itemStatus = new Map();
-    const extractedStatus = new Map();
+    const extractedByKey = new Map(state.extracted.map(e => [itemKey(e), e]));
+    const rowsByKey = new Map(state.rows.map(r => [itemKey(r), r]));
+    const itemStatus = new Map(), extractedStatus = new Map();
     let matched = 0, mismatch = 0, itemsOnly = 0, extractedOnly = 0;
-
-    state.items.forEach(m => {
-      const e = extractedByKey.get(itemKey(m));
-      if (!e) { itemStatus.set(m.id, 'only'); itemsOnly++; }
-      else if (Number(m.qty) === Number(e.qty)) { itemStatus.set(m.id, 'matched'); matched++; }
-      else { itemStatus.set(m.id, 'mismatch'); mismatch++; }
+    state.rows.forEach(r => {
+      const e = extractedByKey.get(itemKey(r));
+      if (!e) { itemStatus.set(r.id, 'only'); itemsOnly++; }
+      else if (Number(r.qty) === Number(e.qty)) { itemStatus.set(r.id, 'matched'); matched++; }
+      else { itemStatus.set(r.id, 'mismatch'); mismatch++; }
     });
-
     state.extracted.forEach(e => {
-      const m = itemsByKey.get(itemKey(e));
-      if (!m) { extractedStatus.set(e.id, 'only'); extractedOnly++; }
-      else if (Number(m.qty) === Number(e.qty)) { extractedStatus.set(e.id, 'matched'); }
-      else { extractedStatus.set(e.id, 'mismatch'); }
+      const r = rowsByKey.get(itemKey(e));
+      if (!r) { extractedStatus.set(e.id, 'only'); extractedOnly++; }
+      else extractedStatus.set(e.id, Number(r.qty) === Number(e.qty) ? 'matched' : 'mismatch');
     });
-
     return { matched, mismatch, itemsOnly, extractedOnly, itemStatus, extractedStatus };
   }
 
   function renderSummary(cmp) {
-    el('lsMatched').textContent = cmp.matched;
-    el('lsMismatch').textContent = cmp.mismatch;
-    el('lsOnly').textContent = cmp.itemsOnly;
-    el('lsExtractedOnly').textContent = cmp.extractedOnly;
+    byId(cfg.lsIds.matched).textContent = cmp.matched;
+    byId(cfg.lsIds.mismatch).textContent = cmp.mismatch;
+    byId(cfg.lsIds.only).textContent = cmp.itemsOnly;
+    byId(cfg.lsIds.extractedOnly).textContent = cmp.extractedOnly;
   }
 
-  function renderItems(itemStatus) {
-    const wrap = el('tableWrap'), empty = el('emptyState'), summaryBar = el('summaryBar');
-
+  function renderRows(itemStatus) {
+    const wrap = byId('mtoTableWrap'), empty = byId('emptyState'), summaryBar = byId('mtoSummary');
     if (!state.activeLineId) {
       wrap.style.display = 'none'; empty.style.display = 'flex'; summaryBar.style.display = 'none';
+      byId('itemCountBadge').textContent = '0 items';
       return;
     }
     wrap.style.display = 'block'; empty.style.display = 'none'; summaryBar.style.display = 'flex';
 
     const rowClass = { mismatch: 'row-mismatch', only: 'row-manual-only' };
-    const tbody = el('tbody');
-    tbody.innerHTML = state.items.map((item, i) => `
-      <tr class="${rowClass[itemStatus.get(item.id)] || ''}">
-        <td style="color:var(--text-faint);font-family:var(--font-mono);font-size:10px">${String(i + 1).padStart(2, '0')}</td>
-        <td>
-          <div style="font-size:12px;color:var(--text-primary)">${item.desc}</div>
-          ${item.rem ? `<div style="font-size:10px;color:var(--text-faint);margin-top:2px">${item.rem}</div>` : ''}
+    const cell = (r, f, cls = '') => `<input class="inline-input ${cls}" data-row="${r.id}" data-field="${f}" value="${escAttr(r[f])}"/>`;
+    let errorCount = 0;
+    byId('mtoTbody').innerHTML = state.rows.map(r => {
+      const errs = rowErrors(r);
+      if (errs.length) errorCount++;
+      const cls = [rowClass[itemStatus.get(r.id)], r.id === state.selectedId && 'row-active', (r.id < 0 || r._dirty) && 'row-dirty'].filter(Boolean).join(' ');
+      return `<tr class="${cls}" data-row-id="${r.id}">
+        <td class="td-acts" style="justify-content:flex-start">
+          <div class="tool-btn" data-edit-id="${r.id}" title="Edit"><i class="ti ti-pencil"></i></div>
+          <div class="tool-btn" data-delete-id="${r.id}" title="Delete" style="color:var(--color-danger)"><i class="ti ti-trash"></i></div>
         </td>
-        <td class="td-tag">${item.size}</td>
-        <td><span class="badge badge-muted">${item.spec}</span></td>
-        <td style="color:var(--text-secondary);font-size:11px">${item.sch}</td>
-        <td style="color:var(--text-secondary);font-size:11px">${item.unit}</td>
-        <td class="td-num">
-          <input class="inline-input" type="text" value="${item.qty}" data-item-id="${item.id}" onfocus="this.select()"/>
-        </td>
-        <td class="td-acts">
-          <div class="tool-btn" data-copy-id="${item.id}" title="Duplicate"><i class="ti ti-copy"></i></div>
-          <div class="tool-btn" data-delete-id="${item.id}" title="Delete" style="color:var(--color-danger)"><i class="ti ti-trash"></i></div>
-        </td>
-      </tr>
-    `).join('');
+        <td>${cell(r, 'pipingClass')}</td>
+        <td>${cell(r, 'inputCode')}</td>
+        <td>${cell(r, 'itemCode')}</td>
+        <td>${cell(r, 'dia1', 'num')}</td>
+        <td>${cell(r, 'dia2', 'num')}</td>
+        <td>${cell(r, 'qty', 'num')}</td>
+        <td class="cos-err" title="${escAttr(errs.join('\n'))}">${errs.length ? '!' : ''}</td>
+      </tr>`;
+    }).join('') || `<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--text-faint)">No rows yet — press Insert</td></tr>`;
 
-    tbody.querySelectorAll('.inline-input').forEach(inp => {
-      inp.addEventListener('change', () => updateQty(Number(inp.dataset.itemId), inp.value));
-    });
-    tbody.querySelectorAll('[data-copy-id]').forEach(btn => {
-      btn.addEventListener('click', () => copyItem(Number(btn.dataset.copyId)));
-    });
-    tbody.querySelectorAll('[data-delete-id]').forEach(btn => {
-      btn.addEventListener('click', () => deleteItem(Number(btn.dataset.deleteId)));
-    });
-
-    const pipes = state.items.filter(x => x.cat === 'Pipe');
-    const fittings = state.items.filter(x => ['Elbow', 'Tee', 'Reducer', 'Cap'].includes(x.cat));
-    const valves = state.items.filter(x => x.cat === 'Valve');
-    const pipeLen = pipes.reduce((s, p) => s + (parseFloat(p.qty) || 0), 0);
-
-    el('sumItems').textContent = state.items.length;
-    el('sumPipe').textContent = pipeLen.toFixed(1) + ' m';
-    el('sumFit').textContent = fittings.reduce((s, x) => s + (parseInt(x.qty) || 0), 0);
-    el('sumValves').textContent = valves.reduce((s, x) => s + (parseInt(x.qty) || 0), 0);
-    el('itemCountBadge').textContent = state.items.length + ' items';
+    byId('sumItems').textContent = state.rows.length;
+    byId('sumQty').textContent = +state.rows.reduce((s, r) => s + (parseFloat(r.qty) || 0), 0).toFixed(3);
+    byId('sumErrors').textContent = errorCount;
+    byId('itemCountBadge').textContent = state.rows.length + ' items';
   }
 
   function renderExtracted(extractedStatus) {
-    const wrap = el('extractedTableWrap'), empty = el('extractedEmptyState');
-
-    if (!state.activeLineId) {
+    const wrap = byId('extractedTableWrap'), empty = byId('extractedEmptyState');
+    if (!state.activeLineId || !state.extracted.length) {
       wrap.style.display = 'none'; empty.style.display = 'flex';
       empty.querySelector('.empty-msg').textContent = 'No extraction available';
-      empty.querySelector('.empty-sub').textContent = 'Select a line to view its Smart P&ID extracted quantities';
-      el('extractedCountBadge').textContent = '0 items';
+      empty.querySelector('.empty-sub').textContent = state.activeLineId
+        ? 'This line has no Smart P&ID extraction yet'
+        : 'Select a line to view its Smart P&ID extracted quantities';
+      byId('extractedCountBadge').textContent = '0 items';
       return;
     }
-    if (!state.extracted.length) {
-      wrap.style.display = 'none'; empty.style.display = 'flex';
-      empty.querySelector('.empty-msg').textContent = 'No extraction available';
-      empty.querySelector('.empty-sub').textContent = 'This line has no Smart P&ID extraction yet';
-      el('extractedCountBadge').textContent = '0 items';
-      return;
-    }
-
     wrap.style.display = 'block'; empty.style.display = 'none';
     const rowClass = { mismatch: 'row-mismatch', only: 'row-extracted-only' };
-    const tbody = el('extractedTbody');
-    tbody.innerHTML = state.extracted.map((item, i) => `
-      <tr class="${rowClass[extractedStatus.get(item.id)] || ''}">
+    const td = (v, cls = '') => `<td class="${cls}">${escAttr(v ?? '')}</td>`;
+    byId('extractedTbody').innerHTML = state.extracted.map((e, i) => `
+      <tr class="${rowClass[extractedStatus.get(e.id)] || ''}">
         <td style="color:var(--text-faint);font-family:var(--font-mono);font-size:10px">${String(i + 1).padStart(2, '0')}</td>
-        <td style="font-size:12px;color:var(--text-primary)">${item.desc}</td>
-        <td class="td-tag">${item.size}</td>
-        <td><span class="badge badge-muted">${item.spec}</span></td>
-        <td style="color:var(--text-secondary);font-size:11px">${item.sch}</td>
-        <td style="color:var(--text-secondary);font-size:11px">${item.unit}</td>
-        <td class="td-num">${item.qty}</td>
-      </tr>
-    `).join('');
-    el('extractedCountBadge').textContent = state.extracted.length + ' items';
+        ${td(e.pipingClass)}${td(e.inputCode)}${td(e.itemCode)}${td(e.dia1, 'td-tag')}${td(e.dia2, 'td-tag')}${td(e.qty, 'td-num')}
+      </tr>`).join('');
+    byId('extractedCountBadge').textContent = state.extracted.length + ' items';
   }
 
   function refresh() {
     const cmp = computeComparison();
     renderSummary(cmp);
-    renderItems(cmp.itemStatus);
+    renderRows(cmp.itemStatus);
     renderExtracted(cmp.extractedStatus);
   }
 
-  async function updateQty(id, val) {
-    const qty = isNaN(parseFloat(val)) ? val : parseFloat(val);
-    try {
-      const updated = await cfg.api.updateQty(id, qty);
-      const item = state.items.find(x => x.id === id);
-      if (item) item.qty = updated.qty;
-      markUnsaved(); refresh();
-    } catch (err) {
-      showToast('error', 'Could not update quantity', err.message);
-      refresh();
-    }
+  /* ── Row editing (local until Save) ── */
+  function requireLine() {
+    if (state.activeLineId) return true;
+    showToast('error', 'No line selected', 'Choose Service, LSR NO, Subline No. and Zone first');
+    return false;
   }
+  const findRow = (id) => state.rows.find(r => r.id === id);
+  const snapshot = (r) => Object.fromEntries(ROW_FIELDS.map(f => [f, r[f]]));
+  function pushUndo(entry) { state.undo.push(entry); if (state.undo.length > 50) state.undo.shift(); }
 
-  async function deleteItem(id) {
-    try {
-      await cfg.api.deleteItem(id);
-      state.items = state.items.filter(x => x.id !== id);
-      markUnsaved(); refresh();
-      showToast('info', 'Item removed', 'List updated');
-    } catch (err) {
-      showToast('error', 'Could not remove item', err.message);
-    }
-  }
-
-  async function copyItem(id) {
-    const item = state.items.find(x => x.id === id);
-    if (!item) return;
-    try {
-      const copy = await cfg.api.addItem(state.activeLineId, {
-        cat: item.cat, desc: item.desc, size: item.size, spec: item.spec,
-        sch: item.sch, unit: item.unit, qty: item.qty, rem: item.rem,
-      });
-      const idx = state.items.findIndex(x => x.id === id);
-      state.items.splice(idx + 1, 0, copy);
-      markUnsaved(); refresh();
-      showToast('success', 'Item duplicated', 'Edit quantity as needed');
-    } catch (err) {
-      showToast('error', 'Could not duplicate item', err.message);
-    }
-  }
-
-  async function addNewItem(fields) {
-    const item = await cfg.api.addItem(state.activeLineId, fields);
-    state.items.push(item);
+  function insertRow(fields = {}, afterId = null) {
+    if (!requireLine()) return;
+    const row = {
+      id: tmpId--, pipingClass: byId('cos_pipingClass').value.trim() || state.line.pipingSpec || '',
+      inputCode: '', itemCode: '', dia1: '', dia2: '', qty: 1, ...fields,
+    };
+    const idx = afterId == null ? state.rows.length : state.rows.findIndex(r => r.id === afterId) + 1;
+    state.rows.splice(idx, 0, row);
+    state.selectedId = row.id;
+    pushUndo({ type: 'insert', id: row.id });
     markUnsaved(); refresh();
-    return item;
+    const first = byId('mtoTbody').querySelector(`input[data-row="${row.id}"][data-field="${fields.inputCode ? 'qty' : 'inputCode'}"]`);
+    if (first) first.focus();
+  }
+
+  function duplicateRow() {
+    if (!requireLine()) return;
+    const r = findRow(state.selectedId);
+    if (!r) { showToast('error', 'Select a row first', 'Click a row, then Duplicate'); return; }
+    insertRow(snapshot(r), r.id);
+  }
+
+  function deleteRow(id = state.selectedId) {
+    if (!requireLine()) return;
+    const idx = state.rows.findIndex(r => r.id === id);
+    if (idx < 0) { showToast('error', 'Select a row first', 'Click a row, then Delete Line'); return; }
+    const [row] = state.rows.splice(idx, 1);
+    if (row.id > 0) state.deleted.push(row.id);
+    pushUndo({ type: 'delete', row, idx });
+    state.selectedId = null;
+    markUnsaved(); refresh();
+  }
+
+  function editCell(id, field, value) {
+    const r = findRow(id);
+    if (!r || String(r[field] ?? '') === value) return;
+    pushUndo({ type: 'edit', id, field, before: r[field] });
+    r[field] = value;
+    if (r.id > 0) r._dirty = true;
+    markUnsaved();
+    updateRowInPlace(r);
+  }
+
+  // After a cell edit: refresh only that row's Err / status and the totals, so
+  // focus stays where the user tabbed to (a full re-render would drop it)
+  function updateRowInPlace(r) {
+    const cmp = computeComparison();
+    renderSummary(cmp);
+    renderExtracted(cmp.extractedStatus);
+    const tr = byId('mtoTbody').querySelector(`tr[data-row-id="${r.id}"]`);
+    if (tr) {
+      const errs = rowErrors(r);
+      const errCell = tr.querySelector('.cos-err');
+      errCell.textContent = errs.length ? '!' : '';
+      errCell.title = errs.join('\n');
+      tr.classList.remove('row-mismatch', 'row-manual-only');
+      const st = cmp.itemStatus.get(r.id);
+      if (st === 'mismatch') tr.classList.add('row-mismatch');
+      if (st === 'only') tr.classList.add('row-manual-only');
+      tr.classList.add('row-dirty');
+    }
+    byId('sumQty').textContent = +state.rows.reduce((s, x) => s + (parseFloat(x.qty) || 0), 0).toFixed(3);
+    byId('sumErrors').textContent = state.rows.filter(x => rowErrors(x).length).length;
+  }
+
+  function undo() {
+    const u = state.undo.pop();
+    if (!u) { showToast('info', 'Nothing to undo', ''); return; }
+    if (u.type === 'insert') state.rows = state.rows.filter(r => r.id !== u.id);
+    if (u.type === 'delete') {
+      state.rows.splice(u.idx, 0, u.row);
+      state.deleted = state.deleted.filter(id => id !== u.row.id);
+    }
+    if (u.type === 'edit') { const r = findRow(u.id); if (r) { r[u.field] = u.before; if (r.id > 0) r._dirty = true; } }
+    if (u.type === 'header') { byId('cos_' + u.key).value = u.before; renderHeaderStatus(); }
+    if (u.type === 'headerCheck') { byId('cos_boltTensioning').checked = u.before; }
+    markUnsaved(); refresh();
+  }
+
+  /* ── Save: rows, header, line status ── */
+  async function save() {
+    if (!requireLine()) return;
+    const btn = byId('saveBtn'); btn.disabled = true;
+    try {
+      for (const id of state.deleted) await cfg.api.deleteItem(id);
+      for (const r of state.rows) {
+        if (r.id < 0) await cfg.api.addItem(state.activeLineId, snapshot(r));
+        else if (r._dirty) await cfg.api.updateItem(r.id, snapshot(r));
+      }
+      const updatedLine = await DataStore.saveLineCosmas(state.activeLineId, readHeader());
+      Object.assign(state.line, updatedLine);
+
+      if (cfg.drivesShared) {
+        const count = state.rows.length;
+        const status = count ? (state.line.status === 'complete' ? 'complete' : 'inprogress') : 'pending';
+        Object.assign(state.line, await DataStore.setLineStatus(state.activeLineId, status, count));
+      }
+      const known = allLines.find(x => x.id === state.activeLineId);
+      if (known) Object.assign(known, state.line);
+      if (cfg.drivesShared) renderSummaryTable(document.getElementById('summarySearch').value);
+
+      state.rows = (await cfg.api.getItems(state.activeLineId)).map(r => ({ ...r }));
+      state.deleted = []; state.undo = []; state.selectedId = null;
+      fillHeader(state.line);
+      markSaved(); refresh();
+      showToast('success', 'Saved', `${state.rows.length} row(s) saved for ${state.line.lineNo}`);
+    } catch (err) {
+      showToast('error', 'Could not save', err.message);
+    } finally {
+      btn.disabled = false;
+    }
   }
 
   function markUnsaved() {
-    el('unsavedBadge').style.display = 'inline-flex';
-    el('savedBadge').style.display = 'none';
+    state.dirty = true;
+    byId('unsavedBadge').style.display = 'inline-flex';
+    byId('savedBadge').style.display = 'none';
   }
   function markSaved() {
-    el('unsavedBadge').style.display = 'none';
-    el('savedBadge').style.display = 'inline-flex';
+    state.dirty = false;
+    byId('unsavedBadge').style.display = 'none';
+    byId('savedBadge').style.display = 'inline-flex';
   }
 
-  async function save() {
-    if (!state.activeLineId) { showToast('error', 'No line selected', ''); return; }
+  /* ── << < > >> : step through the lines opened for this job/unit ── */
+  function orderedLines() {
+    return [...allLines].sort((a, b) =>
+      String(a.service).localeCompare(String(b.service)) ||
+      String(a.seqNo).localeCompare(String(b.seqNo), undefined, { numeric: true }) ||
+      String(a.zone).localeCompare(String(b.zone)));
+  }
+  function navigate(where) {
+    const list = orderedLines();
+    if (!list.length) { showToast('info', 'No lines yet', 'Open a line with the selectors first'); return; }
+    const i = list.findIndex(l => l.id === state.activeLineId);
+    const target = { first: 0, last: list.length - 1, prev: i <= 0 ? 0 : i - 1, next: i < 0 ? 0 : Math.min(i + 1, list.length - 1) }[where];
+    if (list[target].id !== state.activeLineId) selectLine(list[target].id);
+  }
 
-    if (!cfg.drivesShared) {
-      // No separate "dump status" field on the line yet — just acknowledge locally.
-      markSaved();
-      showToast('success', 'Saved', 'Dump check items saved');
-      return;
-    }
-
-    const line = allLines.find(x => x.id === state.activeLineId);
-    if (!line) return;
-    const items = state.items.length;
-    const status = items ? (line.status === 'complete' ? 'complete' : 'inprogress') : 'pending';
-    try {
-      const updated = await DataStore.setLineStatus(line.id, status, items);
-      line.items = updated.items;
-      line.status = updated.status;
-      markSaved(); renderSummaryTable(document.getElementById('summarySearch').value);
-      showToast('success', 'Saved', 'MTO saved successfully');
-    } catch (err) {
-      showToast('error', 'Could not save', err.message);
-    }
+  /* ── Export Line Data to Excel (CSV, opens in Excel) ── */
+  function exportLine() {
+    if (!requireLine()) return;
+    const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const head = readHeader(), defaults = headerDefaults(state.line);
+    const { lsr, subline } = splitSeqNo(state.line.seqNo);
+    const lines = [
+      ['Line Key', byId('ld_lineKey').textContent], ['Line No', state.line.lineNo],
+      ['Service', state.line.service], ['Unit', state.line.unitNo], ['LSR NO', lsr], ['Subline No.', subline], ['Zone', state.line.zone],
+      ...COSMAS_KEYS.map(k => [byId('cos_' + k).closest('.field').querySelector('.field-label').textContent, head[k] ?? defaults[k] ?? '']),
+      ['Bolt Tensioning Required', byId('cos_boltTensioning').checked ? 'Yes' : 'No'],
+      [],
+      ['Piping Class', 'Input Code', 'Item Code', 'Dia1', 'Dia2', 'Qty', 'Err'],
+      ...state.rows.map(r => [...ROW_FIELDS.map(f => r[f]), rowErrors(r).join('; ')]),
+    ];
+    const csv = '﻿' + lines.map(row => row.map(q).join(',')).join('\r\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    a.download = `${state.line.lineNo.replace(/[^\w.-]+/g, '_')}_${state.line.zone}_BoM.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
   }
 
   async function openPidViewer() {
-    if (!state.activeLineId) { showToast('error', 'No line selected', 'Select a line first'); return; }
+    if (!requireLine()) return;
     try {
       const doc = await DataStore.getPidDocumentForLine(state.activeLineId);
-      window.open(
-        `pid-viewer.html?doc=${doc.masterIndexId}&line=${state.activeLineId}`,
-        'ipmcs_pid_viewer_' + cfg.key, 'width=1100,height=800'
-      );
+      window.open(`pid-viewer.html?doc=${doc.masterIndexId}&line=${state.activeLineId}`, 'ipmcs_pid_viewer_' + cfg.key, 'width=1100,height=800');
     } catch (err) {
       showToast('error', 'No P&ID available for this line', err.message);
     }
   }
 
-  function exportItems() {
-    if (!state.activeLineId) { showToast('error', 'No line selected', ''); return; }
-    showToast('info', 'Export placeholder', 'CSV export will be added later');
-  }
+  /* ── Wiring ── */
+  byId('li_service').addEventListener('change', onServiceChange);
+  byId('li_seq').addEventListener('change', onSeqChange);
+  byId('li_subline').addEventListener('change', onSublineChange);
+  byId('li_zone').addEventListener('change', onZoneChange);
 
-  el('service').addEventListener('change', onServiceChange);
-  el('seq').addEventListener('change', onSeqChange);
-  el('zone').addEventListener('change', onZoneChange);
-  el('addItemBtn').addEventListener('click', () => openAddModal(controller));
-  el('uploadBtn').addEventListener('click', () => openUploadModal(controller));
-  el('openPidBtn').addEventListener('click', openPidViewer);
-  el('exportBtn').addEventListener('click', exportItems);
-  el('saveBtn').addEventListener('click', save);
+  COSMAS_KEYS.forEach(k => {
+    const input = byId('cos_' + k);
+    input.addEventListener('focus', () => { input.dataset.before = input.value; });
+    input.addEventListener('change', () => {
+      pushUndo({ type: 'header', key: k, before: input.dataset.before ?? '' });
+      input.dataset.before = input.value;
+      markUnsaved(); renderHeaderStatus();
+    });
+    input.addEventListener('input', renderHeaderStatus);
+  });
+  byId('cos_boltTensioning').addEventListener('change', (e) => {
+    pushUndo({ type: 'headerCheck', before: !e.target.checked });
+    markUnsaved();
+  });
+
+  const tbody = byId('mtoTbody');
+  tbody.addEventListener('change', (e) => {
+    const inp = e.target.closest('input[data-row]');
+    if (inp) editCell(Number(inp.dataset.row), inp.dataset.field, inp.value.trim());
+  });
+  tbody.addEventListener('click', (e) => {
+    const del = e.target.closest('[data-delete-id]');
+    if (del) { deleteRow(Number(del.dataset.deleteId)); return; }
+    const tr = e.target.closest('tr[data-row-id]');
+    if (!tr) return;
+    const id = Number(tr.dataset.rowId);
+    if (state.selectedId !== id) {
+      state.selectedId = id;
+      tbody.querySelectorAll('tr.row-active').forEach(x => x.classList.remove('row-active'));
+      tr.classList.add('row-active');
+    }
+    if (e.target.closest('[data-edit-id]')) tr.querySelector('input[data-field="pipingClass"]').focus();
+  });
+
+  byId('addItemBtn').addEventListener('click', () => insertRow());
+  byId('dupItemBtn').addEventListener('click', duplicateRow);
+  byId('deleteItemBtn').addEventListener('click', () => deleteRow());
+  byId('undoBtn').addEventListener('click', undo);
+  byId('saveBtn').addEventListener('click', save);
+  byId('navFirstBtn').addEventListener('click', () => navigate('first'));
+  byId('navPrevBtn').addEventListener('click', () => navigate('prev'));
+  byId('navNextBtn').addEventListener('click', () => navigate('next'));
+  byId('navLastBtn').addEventListener('click', () => navigate('last'));
+  byId('exportBtn').addEventListener('click', exportLine);
+  byId('openPidBtn').addEventListener('click', openPidViewer);
+  byId('uploadBtn').addEventListener('click', () => openUploadModal(controller));
+  byId('mtoTbody').closest('.entry-col').querySelectorAll('.cos-soon').forEach(btn => {
+    btn.addEventListener('click', () => showToast('info', btn.dataset.label, 'Coming soon — this COSMAS function is not built yet'));
+  });
+
+  fillHeader(null);
 
   const controller = {
     key: cfg.key,
     onlyLabel: cfg.onlyLabel,
     get activeLineId() { return state.activeLineId; },
-    populateServices, selectLine, addNewItem,
+    get hasUnsavedChanges() { return state.dirty; },
+    populateServices, selectLine,
+    // Model Dump / other callers adding a row to the open line
+    addNewItem: async (fields) => { insertRow(fields); return findRow(state.selectedId); },
   };
   return controller;
 }

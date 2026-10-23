@@ -11,9 +11,7 @@ async function create(req, res) {
 }
 
 async function update(req, res) {
-  const { qty } = req.body;
-  if (qty === undefined) throw new HttpError(400, 'qty is required');
-  const item = await dumpItemsService.updateItemQty(req.params.id, qty);
+  const item = await dumpItemsService.updateItem(req.params.id, req.body || {});
   if (!item) throw new HttpError(404, 'Item not found');
   res.json(item);
 }

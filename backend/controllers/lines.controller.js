@@ -28,6 +28,19 @@ async function sequences(req, res) {
   res.json(await linesService.getSequences(req.user.jobNo, req.user.unitNo, service));
 }
 
+async function sublines(req, res) {
+  const { service, seq } = req.query;
+  if (!service || !seq) throw new HttpError(400, 'service and seq are required');
+  res.json(await linesService.getSublines(req.user.jobNo, req.user.unitNo, service, seq));
+}
+
+// COSMAS line header (Contr.Code, DRG indicator, batch, …) for a line of the user's own job/unit
+async function updateCosmas(req, res) {
+  const line = await linesService.getLineById(req.params.id);
+  if (!line || line.jobNo !== req.user.jobNo || line.unitNo !== req.user.unitNo) throw new HttpError(404, 'Line not found');
+  res.json(await linesService.updateCosmas(req.params.id, req.body || {}));
+}
+
 async function zones(req, res) {
   const { service, seq } = req.query;
   if (!service || !seq) throw new HttpError(400, 'service and seq are required');
@@ -45,4 +58,4 @@ async function lookup(req, res) {
   res.json(line);
 }
 
-module.exports = { list, getOne, update, services, sequences, zones, lookup };
+module.exports = { list, getOne, update, updateCosmas, services, sequences, sublines, zones, lookup };
