@@ -44,7 +44,8 @@ function logout(req, res) {
 
 async function startSession(employee, res) {
   const role = await authService.getIpmcsRole(employee.empId);
-  const assignments = await authService.getAssignments(employee.empId);
+  // Only the job is chosen at login; the unit is switched in the page
+  const assignments = authService.jobsFrom(await authService.getAssignments(employee.empId));
 
   if (assignments.length > 1) {
     const preAuthToken = authService.generatePreAuthToken({
@@ -97,4 +98,10 @@ function me(req, res) {
   res.json({ user: req.user });
 }
 
-module.exports = { login, ssoLogin, logout, selectAssignment, me };
+// Units the user can switch between on the session's job (live from PC-2)
+async function units(req, res) {
+  if (!req.user.jobNo) return res.json([]);
+  res.json(await authService.getUnitsForJob(req.user.empId, req.user.jobNo));
+}
+
+module.exports = { login, ssoLogin, logout, selectAssignment, me, units };

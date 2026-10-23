@@ -50,6 +50,28 @@ async function getAssignments(empId) {
   return rows;
 }
 
+// Units the user is assigned to on one job (for the Unit dropdown)
+async function getUnitsForJob(empId, jobNo) {
+  const { rows } = await queryEpulse(
+    `SELECT DISTINCT unit_no FROM user_role_assignments
+     WHERE upper(user_id) = upper($1) AND project_id = $2 ORDER BY 1`,
+    [empId, jobNo]
+  );
+  return rows.map((r) => r.unit_no);
+}
+
+// Login only asks for the JOB — the unit is picked in the page afterwards.
+// One entry per job, carrying its first unit as the starting unit.
+function jobsFrom(assignments) {
+  const byJob = new Map();
+  assignments.forEach((a) => {
+    const j = byJob.get(a.jobNo);
+    if (j) j.unitCount++;
+    else byJob.set(a.jobNo, { ...a, unitCount: 1 });
+  });
+  return [...byJob.values()];
+}
+
 async function upsertLocalUser(empId, name) {
   const { rows } = await query(
     `INSERT INTO users (emp_id, name) VALUES ($1,$2)
@@ -87,6 +109,8 @@ module.exports = {
   getActiveEmployee,
   getIpmcsRole,
   getAssignments,
+  getUnitsForJob,
+  jobsFrom,
   upsertLocalUser,
   generateToken,
   generatePreAuthToken,

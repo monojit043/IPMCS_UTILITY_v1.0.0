@@ -10,5 +10,6 @@ router.post('/sso', asyncHandler(authController.ssoLogin));
 router.post('/logout', authController.logout);
 router.post('/select-assignment', asyncHandler(authController.selectAssignment));
 router.get('/me', requireAuth, authController.me);
+router.get('/units', requireAuth, asyncHandler(authController.units));
 
 module.exports = router;

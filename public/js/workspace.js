@@ -29,13 +29,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('userNameEl').textContent = user.name;
   document.getElementById('roleStatEl').textContent = 'Role: ' + user.role;
 
-  const jobUnitLabel = user.jobNo
-    ? `${user.jobName ? user.jobName + ' · ' : ''}${user.jobNo}${user.unitNo ? ' · Unit ' + user.unitNo : ''}`
-    : 'No job assigned';
-  document.getElementById('projectPillEl').innerHTML = `<i class="ti ti-briefcase"></i>${jobUnitLabel}`;
-  document.getElementById('jobUnitStatEl').textContent = jobUnitLabel;
-  document.getElementById('li_unitDisplay').value = user.unitNo || '—';
-  document.getElementById('dc_li_unitDisplay').value = user.unitNo || '—';
+  showJobUnitLabel();
 
   bindGlobalEvents();
   initPidLibrary();
@@ -70,6 +64,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   });
 
   try {
+    await populateUnits();
     allLines = await DataStore.getLines();
     await Promise.all([inputCtrl.populateServices(), dumpCtrl.populateServices()]);
   } catch (err) {
@@ -80,6 +75,60 @@ window.addEventListener('DOMContentLoaded', async () => {
   setInterval(updateClock, 1000);
   updateClock();
 });
+
+/* ══════════════ UNIT (switchable, your PC-2 units on this job) ══════════════ */
+const UNIT_SELECTS = ['li_unitDisplay', 'dc_li_unitDisplay'];
+
+function showJobUnitLabel() {
+  const user = currentUser, unit = DataStore.getUnit();
+  const label = user.jobNo
+    ? `${user.jobName ? user.jobName + ' · ' : ''}${user.jobNo}${unit ? ' · Unit ' + unit : ''}`
+    : 'No job assigned';
+  document.getElementById('projectPillEl').innerHTML = `<i class="ti ti-briefcase"></i>${label}`;
+  document.getElementById('jobUnitStatEl').textContent = label;
+}
+
+async function populateUnits() {
+  let units = [];
+  try { units = await DataStore.getUnits(); } catch (err) { /* fall back to the session unit */ }
+  let current = DataStore.getUnit();
+  if (units.length && !units.includes(current)) {   // assignment removed on PC-2 since login
+    current = units[0];
+    DataStore.setUnit(current);
+    showJobUnitLabel();
+  }
+  const list = units.length ? units : [current].filter(Boolean);
+  UNIT_SELECTS.forEach(id => {
+    const sel = document.getElementById(id);
+    sel.innerHTML = list.map(u => `<option value="${escAttr(u)}">${escAttr(u)}</option>`).join('') || '<option value="">—</option>';
+    sel.value = current || '';
+    sel.disabled = list.length < 2;
+    if (!sel.dataset.bound) {
+      sel.addEventListener('change', (e) => switchUnit(e.target.value));
+      sel.dataset.bound = '1';
+    }
+  });
+}
+
+async function switchUnit(unitNo) {
+  if ((inputCtrl.hasUnsavedChanges || dumpCtrl.hasUnsavedChanges) &&
+      !confirm('You have unsaved changes. Switch unit and discard them?')) {
+    UNIT_SELECTS.forEach(id => { document.getElementById(id).value = DataStore.getUnit(); });
+    return;
+  }
+  DataStore.setUnit(unitNo);
+  UNIT_SELECTS.forEach(id => { document.getElementById(id).value = unitNo; });
+  showJobUnitLabel();
+  try {
+    allLines = await DataStore.getLines();
+    await Promise.all([inputCtrl.resetForUnit(), dumpCtrl.resetForUnit()]);
+    renderSummaryTable(document.getElementById('summarySearch').value);
+    showToast('success', `Unit ${unitNo}`, 'Lines and pick lists now show this unit');
+  } catch (err) {
+    showToast('error', 'Could not switch unit', err.message);
+  }
+}
+
 
 function updateClock() {
   document.getElementById('timeStat').textContent =
@@ -93,7 +142,7 @@ function updateClock() {
 function initPendingAssignment(pending) {
   document.getElementById('assignmentWelcome').textContent = `Welcome, ${pending.name}.`;
   document.getElementById('assignmentSelect').innerHTML = pending.assignments
-    .map(a => `<option value="${a.jobNo}::${a.unitNo}">${a.jobName || a.jobNo} (${a.jobNo}) · Unit ${a.unitNo}</option>`)
+    .map(a => `<option value="${a.jobNo}::${a.unitNo}">${a.jobName || a.jobNo} (${a.jobNo}) · ${a.unitCount || 1} unit${(a.unitCount || 1) > 1 ? 's' : ''}</option>`)
     .join('');
 
   const modal = document.getElementById('assignmentModal');
@@ -850,6 +899,13 @@ function createMtoController(cfg) {
     get activeLineId() { return state.activeLineId; },
     get hasUnsavedChanges() { return state.dirty; },
     populateServices, selectLine,
+    // Unit switched: start again from Service for the new unit
+    resetForUnit: async () => {
+      byId('li_service').value = '';
+      fillSelect(byId('li_seq'), [], 'Select…'); byId('li_seq').disabled = true;
+      resetBelow('seq');
+      await populateServices();
+    },
     // Model Dump / other callers adding a row to the open line
     addNewItem: async (fields) => { insertRow(fields); return findRow(state.selectedId); },
   };

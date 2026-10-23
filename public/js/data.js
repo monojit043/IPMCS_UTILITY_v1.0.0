@@ -53,7 +53,11 @@ const DataStore = (() => {
 
   function authHeaders() {
     const token = sessionStorage.getItem('ipmcs_token');
-    return token ? { Authorization: 'Bearer ' + token } : {};
+    if (!token) return {};
+    // The unit being worked in (Unit dropdown) — checked on the server
+    // against the user's PC-2 units for the session's job
+    const unit = sessionStorage.getItem('ipmcs_unit');
+    return { Authorization: 'Bearer ' + token, ...(unit ? { 'X-Unit-No': unit } : {}) };
   }
 
   async function apiFetch(path, options = {}) {
@@ -79,6 +83,7 @@ const DataStore = (() => {
 
   /* ── Auth / session ── */
   function storeSession(token, user) {
+    sessionStorage.removeItem('ipmcs_unit');
     sessionStorage.setItem('ipmcs_token', token);
     sessionStorage.setItem('ipmcs_user', JSON.stringify(user));
     return user;
@@ -151,9 +156,22 @@ const DataStore = (() => {
     return raw ? JSON.parse(raw) : null;
   }
 
+  // Units the user can switch between on this job; the current one
+  function getUnits() {
+    return apiFetch('/auth/units');
+  }
+  function getUnit() {
+    const s = getSession();
+    return sessionStorage.getItem('ipmcs_unit') || (s && s.unitNo) || null;
+  }
+  function setUnit(unitNo) {
+    sessionStorage.setItem('ipmcs_unit', unitNo);
+  }
+
   function clearSession() {
     sessionStorage.removeItem('ipmcs_token');
     sessionStorage.removeItem('ipmcs_user');
+    sessionStorage.removeItem('ipmcs_unit');
     clearPendingAssignment();
   }
 
@@ -296,7 +314,7 @@ const DataStore = (() => {
   }
 
   return {
-    login, ssoLogin, logout, selectAssignment, getSession, clearSession, getPendingAssignment, clearPendingAssignment,
+    login, ssoLogin, logout, selectAssignment, getSession, clearSession, getUnits, getUnit, setUnit, getPendingAssignment, clearPendingAssignment,
     getLines, getLine, setLineStatus,
     getServices, getSequences, getSublines, getZones, resolveLine, saveLineCosmas,
     getMTOItems, addMTOItem, updateMTOItem, deleteMTOItem,
