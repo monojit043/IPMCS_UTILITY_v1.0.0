@@ -27,6 +27,15 @@ const PID_LINES = `
   JOIN pid_master_index m ON m.id = e.master_index_id AND m.status = 'active'
   WHERE m.job_no = $1 AND e.unit_no = $2`;
 
+// A P&ID sub-line (05341-01: seq_no 05341, sub_line 01) is its own line in
+// IPMCS, listed as "05341-01". Letters are part of the line no. itself
+// (05341A). Design data for a sub-line comes from its parent in the line list.
+const PID_SEQ = `e.seq_no || coalesce('-' || e.sub_line, '')`;
+function splitSeq(seqNo) {
+  const m = String(seqNo).match(/^(.+?)-(\d{1,3})$/);
+  return m ? { base: m[1], subLine: m[2] } : { base: String(seqNo), subLine: null };
+}
+
 async function getServices(jobNo, unitNo) {
   const { rows } = await queryEpulse(
     `SELECT service FROM line_list WHERE ${LL_SCOPE} AND coalesce(service, '') <> ''
@@ -42,7 +51,7 @@ async function getSequences(jobNo, unitNo, service) {
   const { rows } = await queryEpulse(
     `SELECT line_no AS seq FROM line_list WHERE ${LL_SCOPE} AND service = $3 AND coalesce(line_no, '') <> ''
      UNION
-     SELECT e.seq_no ${PID_LINES} AND e.service = $3 AND coalesce(e.seq_no, '') <> ''
+     SELECT ${PID_SEQ} ${PID_LINES} AND e.service = $3 AND coalesce(e.seq_no, '') <> ''
      ORDER BY 1`,
     [jobNo, unitNo, service]
   );
@@ -69,6 +78,7 @@ function normalizeZone(zone) {
 // Everything both sources know about one line. Line list wins for size /
 // spec / insulation; the P&ID fills gaps; any disagreement is recorded.
 async function readSources(jobNo, unitNo, service, seqNo) {
+  const { base, subLine } = splitSeq(seqNo);
   const [{ rows: ll }, { rows: pid }] = await Promise.all([
     queryEpulse(
       `SELECT line_size, line_class, insulation, insulation_thickness, pid_no,
@@ -76,16 +86,16 @@ async function readSources(jobNo, unitNo, service, seqNo) {
               design_press, design_press_unit, design_temp, design_temp_unit
        FROM line_list WHERE ${LL_SCOPE} AND service = $3 AND line_no = $4
        ORDER BY id LIMIT 1`,
-      [jobNo, unitNo, service, seqNo]
+      [jobNo, unitNo, service, base]
     ),
     queryEpulse(
       `SELECT e.full_line_no, e.size_in, e.piping_spec, e.insul_type, m.pid_name
-       ${PID_LINES} AND e.service = $3 AND e.seq_no = $4
+       ${PID_LINES} AND e.service = $3 AND e.seq_no = $4 AND e.sub_line IS NOT DISTINCT FROM $5
        ORDER BY m.pid_name, e.id`,
-      [jobNo, unitNo, service, seqNo]
+      [jobNo, unitNo, service, base, subLine]
     ),
   ]);
-  return { ll: ll[0] || null, pid };
+  return { ll: ll[0] || null, pid, subLine };
 }
 
 const sameValue = (a, b) => String(a || '').replace(/["\s]/g, '').toUpperCase()
@@ -93,14 +103,16 @@ const sameValue = (a, b) => String(a || '').replace(/["\s]/g, '').toUpperCase()
 // The line list may give several sizes ("4\", 2\"") — a P&ID size matching any of them is fine
 const sizeListed = (llSize, pidSize) => String(llSize || '').split(',').some((s) => sameValue(s, pidSize));
 
-function mergeSources({ ll, pid }) {
+function mergeSources({ ll, pid, subLine }) {
   const p = pid[0] || {};
-  const size = ll?.line_size || p.size_in || null;
-  const spec = ll?.line_class || p.piping_spec || null;
-  const insul = ll?.insulation || p.insul_type || null;
+  // A sub-line isn't in the line list itself — its own size/spec/insulation
+  // are what the P&ID shows; only P&T comes from the parent line (ll).
+  const size = subLine ? p.size_in || null : ll?.line_size || p.size_in || null;
+  const spec = subLine ? p.piping_spec || ll?.line_class || null : ll?.line_class || p.piping_spec || null;
+  const insul = subLine ? p.insul_type || ll?.insulation || null : ll?.insulation || p.insul_type || null;
 
   const mismatches = [];
-  if (ll && pid.length) {
+  if (ll && pid.length && !subLine) {
     const pidSizes = [...new Set(pid.map((r) => r.size_in).filter(Boolean))];
     const pidSpecs = [...new Set(pid.map((r) => r.piping_spec).filter(Boolean))];
     const pidInsul = [...new Set(pid.map((r) => r.insul_type).filter(Boolean))];
@@ -117,7 +129,7 @@ function mergeSources({ ll, pid }) {
 
   return {
     size, spec, insul,
-    source: ll && pid.length ? 'line_list+pid' : ll ? 'line_list' : 'pid',
+    source: subLine ? (ll ? 'pid+parent_line' : 'pid') : ll && pid.length ? 'line_list+pid' : ll ? 'line_list' : 'pid',
     pidNo: [...pidNames].join(', ') || null,
     mismatch: mismatches.join('; ') || null,
     opPressure: combine(ll?.oper_press, ll?.oper_press_unit),
@@ -160,7 +172,7 @@ async function resolveLine(jobNo, unitNo, service, seqNo, zone, empId) {
   const z = normalizeZone(zone);
   if (!z) return null;
   const src = await readSources(jobNo, unitNo, service, seqNo);
-  if (!src.ll && !src.pid.length) return null;
+  if (!src.pid.length && (src.subLine || !src.ll)) return null;   // a sub-line must be on a P&ID
   const m = mergeSources(src);
 
   const lineNo = [m.size, service, unitNo, seqNo, m.spec, m.insul].filter(Boolean).join('-');

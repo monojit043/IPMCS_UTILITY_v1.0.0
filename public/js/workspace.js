@@ -377,7 +377,7 @@ function createMtoController(cfg) {
     el('ldPipingSpec').textContent = line.pipingSpec || '—';
     el('ldSize').textContent = line.sizeIn || '—';
     // Where the data came from; hover shows the P&ID(s) and any line list ≠ P&ID differences
-    const SOURCE_LABELS = { line_list: 'Line list', pid: 'P&ID only', 'line_list+pid': 'Line list + P&ID' };
+    const SOURCE_LABELS = { line_list: 'Line list', pid: 'P&ID only', 'line_list+pid': 'Line list + P&ID', 'pid+parent_line': 'P&ID sub-line (P&T from parent line)' };
     el('ldSource').textContent = (SOURCE_LABELS[line.source] || line.source || '—') + (line.dataMismatch ? ' ⚠' : '');
     el('ldSource').title = [line.pidNo && `P&ID: ${line.pidNo}`, line.dataMismatch && `Differs: ${line.dataMismatch}`].filter(Boolean).join('\n');
     el('ldCreatedBy').textContent = line.createdBy || '—';

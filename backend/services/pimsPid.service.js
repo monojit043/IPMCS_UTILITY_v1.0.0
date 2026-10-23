@@ -48,7 +48,8 @@ async function findForLine(jobNo, unitNo, service, seqNo) {
     `SELECT ${MASTER_INDEX_COLUMNS}, ${DOCUMENT_COLUMNS} ${CURRENT_SHEETS}
      JOIN pid_extracted_lines e ON e.document_id = d.id
      WHERE mi.job_no = $1 AND mi.status = 'active'
-       AND e.unit_no = $2 AND e.service = $3 AND e.seq_no = $4
+       AND e.unit_no = $2 AND e.service = $3
+       AND e.seq_no || coalesce('-' || e.sub_line, '') = $4   -- sub-lines are listed as "05341-01"
      ORDER BY mi.pid_name
      LIMIT 1`,
     [jobNo, unitNo, service, seqNo]
