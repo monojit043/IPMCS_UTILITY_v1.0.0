@@ -335,3 +335,20 @@ input.inline-input:focus { border-color: var(--color-accent); box-shadow: 0 0 0 
 .cos-table tbody tr { cursor: pointer; }
 .cos-table tbody tr.row-dirty td:first-child { box-shadow: inset 3px 0 0 var(--color-warning); }
 .cos-err { color: var(--color-danger); font-weight: 700; text-align: center; }
+
+/* ── MTO revision history ── */
+.cos-changed {
+  display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap;
+  padding: 5px 9px; border-radius: var(--radius-md); font-size: 11px; line-height: 1.5;
+  background: var(--color-warning-soft); border: 1px solid rgba(232,163,61,.35); color: var(--color-warning);
+}
+.cos-changed b { font-weight: 700; }
+.cos-changed .chg { white-space: nowrap; color: var(--text-primary); }
+.modal.modal-wide { max-width: 980px; }
+.hist-sub { font-size: 11px; color: var(--text-muted); margin-bottom: 8px; }
+.hist-list { max-height: 34vh; border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+.hist-list tbody tr { cursor: pointer; }
+.hist-detail { margin-top: 12px; max-height: 38vh; overflow: auto; font-size: 12px; }
+.hist-detail h4 { font-family: var(--font-display); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); margin: 10px 0 4px; }
+.hist-kv { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px 14px; }
+.hist-kv div span { display: block; font-size: 9px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }

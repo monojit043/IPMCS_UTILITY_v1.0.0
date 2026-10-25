@@ -150,4 +150,59 @@ async function getLineDataBulk(jobNo, unitNo, keys) {
   return out;
 }
 
-module.exports = { getServices, getLsrNos, getSublines, getLineData, getLineDataBulk };
+// ── Basis: the line data an MTO is based on, recorded with every save ──
+const BASIS_FIELDS = {
+  lineNo: 'Line No', sizeIn: 'Size', pipingSpec: 'Piping Class', insulationType: 'INS Type',
+  insulationThickness: 'INS Thickness', opPressure: 'OPR Pressure', opTemp: 'OPR Temp 1', opTemp2: 'OPR Temp 2',
+  designPressure: 'Des Pressure', designTemp: 'Des Temp1', designTemp2: 'Des Temp2', source: 'Source',
+};
+
+// The line data plus WHICH revisions it came from: each P&ID's current
+// revision and the job's latest line-list upload revision.
+async function getBasis(jobNo, line) {
+  const names = String(line.pidNo || '').split(',').map((s) => s.trim()).filter(Boolean);
+  const [{ rows: pids }, { rows: ll }] = await Promise.all([
+    names.length
+      ? queryEpulse(
+        `SELECT mi.pid_name AS "pidName", d.rev_label AS rev, d.id AS "documentId"
+         FROM pid_master_index mi JOIN pid_documents d ON d.master_index_id = mi.id AND d.status = 'current'
+         WHERE mi.job_no = $1 AND mi.pid_name = ANY($2) ORDER BY mi.pid_name`,
+        [jobNo, names])
+      : { rows: [] },
+    queryEpulse(
+      `SELECT id AS "uploadId", rev_no AS "revNo", uploaded_at AS "uploadedAt"
+       FROM linelist_uploads WHERE job_no = $1 AND is_latest ORDER BY id DESC LIMIT 1`,
+      [jobNo]
+    ),
+  ]);
+  const found = new Set(pids.map((p) => p.pidName));
+  return {
+    ...Object.fromEntries(Object.keys(BASIS_FIELDS).map((k) => [k, line[k] ?? null])),
+    lsrNo: line.lsrNo, sublineNo: line.sublineNo, service: line.service, unitNo: line.unitNo,
+    dataMismatch: line.dataMismatch || null,
+    // P&IDs the line list names but that aren't uploaded yet have no revision
+    pids: [...pids, ...names.filter((n) => !found.has(n)).map((n) => ({ pidName: n, rev: null, documentId: null }))],
+    lineList: ll[0] || null,
+  };
+}
+
+// What changed between a saved basis and now — [{ field, label, was, now }]
+function compareBasis(saved, now) {
+  if (!saved || !now) return [];
+  const out = [];
+  for (const [k, label] of Object.entries(BASIS_FIELDS)) {
+    if ((saved[k] ?? null) !== (now[k] ?? null)) out.push({ field: k, label, was: saved[k] ?? null, now: now[k] ?? null });
+  }
+  const rev = (list) => new Map((list || []).map((p) => [p.pidName, p.rev]));
+  const was = rev(saved.pids), cur = rev(now.pids);
+  for (const name of new Set([...was.keys(), ...cur.keys()])) {
+    if (was.get(name) !== cur.get(name)) {
+      out.push({ field: 'pid', label: `P&ID ${name}`, was: was.has(name) ? `Rev ${was.get(name) ?? '— (not uploaded)'}` : '—', now: cur.has(name) ? `Rev ${cur.get(name) ?? '— (not uploaded)'}` : '—' });
+    }
+  }
+  const llRev = (b) => (b && b.lineList ? b.lineList.revNo : null);
+  if (llRev(saved) !== llRev(now)) out.push({ field: 'lineList', label: 'Line list', was: llRev(saved) == null ? '—' : `Rev ${llRev(saved)}`, now: llRev(now) == null ? '—' : `Rev ${llRev(now)}` });
+  return out;
+}
+
+module.exports = { getServices, getLsrNos, getSublines, getLineData, getLineDataBulk, getBasis, compareBasis, BASIS_FIELDS };

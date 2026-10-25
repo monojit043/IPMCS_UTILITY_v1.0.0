@@ -339,6 +339,8 @@ function createMtoController(cfg) {
     lineData: null,    // live line data of the chosen Service/LSR/Subline
     zone: '',          // chosen zone
     zoneRec: null,     // saved mto_line_zones row (null = new, not saved yet)
+    lastRevision: null,  // newest saved revision of the zone
+    basisChanges: [],    // line data that changed since that revision
     rows: [],          // working copy of the BoM rows (id < 0 = not saved yet)
     extracted: [],
     selectedId: null,
@@ -434,6 +436,7 @@ function createMtoController(cfg) {
   async function openZone(zone) {
     state.zone = zone || '';
     state.zoneRec = null; state.rows = []; state.extracted = []; state.undo = []; state.selectedId = null;
+    state.lastRevision = null; state.basisChanges = [];
     const saved = zone && (state.savedZones || []).find(z => z.zone === zone);
     try {
       if (saved) {
@@ -442,6 +445,8 @@ function createMtoController(cfg) {
         state.lineData = full.line || state.lineData;
         state.rows = (full[cfg.kind] || []).map(r => ({ ...r }));
         state.extracted = full.extracted || [];
+        state.lastRevision = full.lastRevision || null;
+        state.basisChanges = full.basisChanges || [];
       }
     } catch (err) {
       showToast('error', 'Could not open zone', err.message);
@@ -461,6 +466,7 @@ function createMtoController(cfg) {
     if (level === 'subline') { fillSelect(byId('li_subline'), [], 'Select…'); byId('li_subline').disabled = true; }
     fillSelect(byId('li_zone'), [], 'Select…'); byId('li_zone').disabled = true;
     state.lineData = null; state.zone = ''; state.zoneRec = null; state.savedZones = [];
+    state.lastRevision = null; state.basisChanges = [];
     state.rows = []; state.extracted = []; state.undo = []; state.selectedId = null; state.dirty = false;
     byId('mtoTitle').textContent = cfg.key === 'dumpcheck' ? 'MTO from Dump Check' : 'Manual MTO';
     fillHeader();
@@ -529,7 +535,19 @@ function createMtoController(cfg) {
     return out;
   }
 
+  // Warn when the line list / P&ID changed since this zone was last saved
+  function renderChanged() {
+    const box = byId('ld_changed');
+    const changes = state.zoneRec ? state.basisChanges : [];
+    if (!changes.length || !state.lastRevision) { box.style.display = 'none'; box.innerHTML = ''; return; }
+    const r = state.lastRevision;
+    box.innerHTML = `<span>⚠ <b>Line data changed since Rev ${r.revNo}</b> (saved by ${escAttr(r.savedBy)}, ${new Date(r.savedAt).toLocaleString()}) — check the MTO and Save again:</span>` +
+      changes.map(c => `<span class="chg">${escAttr(c.label)}: ${escAttr(c.was ?? '—')} → ${escAttr(c.now ?? '—')}</span>`).join('');
+    box.style.display = 'flex';
+  }
+
   function renderHeaderStatus() {
+    renderChanged();
     const d = state.lineData;
     const statusEl = byId('ld_status');
     const status = state.zoneRec ? LINE_STATUS_TEXT[state.zoneRec.status] : d && state.zone ? 'New (not saved)' : '—';
@@ -540,6 +558,7 @@ function createMtoController(cfg) {
       d.pidNo && `P&ID: ${d.pidNo}`,
       d.dataMismatch && `Differs: ${d.dataMismatch}`,
       state.zoneRec && `Saved by ${state.zoneRec.updatedBy} on ${new Date(state.zoneRec.updatedAt).toLocaleString()}`,
+      state.lastRevision && `Rev ${state.lastRevision.revNo} — View History for all revisions`,
     ].filter(Boolean).join('\n') : '';
     // Contr_Code + service + unit + lsrno + subline + dwg.indicator + area no
     byId('ld_lineKey').textContent = d ? [
@@ -763,6 +782,8 @@ function createMtoController(cfg) {
       state.lineData = full.line || d;
       state.rows = (full[cfg.kind] || []).map(r => ({ ...r }));
       state.extracted = full.extracted || [];
+      state.lastRevision = full.lastRevision || null;
+      state.basisChanges = full.basisChanges || [];
       state.undo = []; state.selectedId = null;
       allLines = await loadAllLines();
       const keepZone = state.zone;
@@ -772,7 +793,7 @@ function createMtoController(cfg) {
       markSaved(true); refresh();
       if (cfg.drivesShared) renderSummaryTable(document.getElementById('summarySearch').value);
       if (cfg.onSaved) cfg.onSaved(full);
-      showToast('success', 'Saved', `${state.rows.length} row(s) · ${d.lineNo} · Zone ${keepZone}`);
+      showToast('success', `Saved · Rev ${state.lastRevision ? state.lastRevision.revNo : ''}`, `${state.rows.length} row(s) · ${d.lineNo} · Zone ${keepZone}`);
     } catch (err) {
       showToast('error', 'Could not save', err.message);
     } finally {
@@ -786,6 +807,8 @@ function createMtoController(cfg) {
     const z = full.zone, d = state.lineData;
     if (!d || d.service !== z.service || d.lsrNo !== z.lsrNo || d.sublineNo !== z.sublineNo || state.zone !== z.zone) return;
     state.zoneRec = z;
+    state.lastRevision = full.lastRevision || state.lastRevision;
+    state.basisChanges = full.basisChanges || [];
     if (!state.dirty) fillHeader();
     renderHeaderStatus();
   }
@@ -896,6 +919,13 @@ function createMtoController(cfg) {
   byId('navNextBtn').addEventListener('click', () => navigate('next'));
   byId('navLastBtn').addEventListener('click', () => navigate('last'));
   byId('exportBtn').addEventListener('click', exportLine);
+  byId('historyBtn').addEventListener('click', () => {
+    if (!state.zoneRec) {
+      showToast('info', 'No history yet', state.zone ? 'This zone has not been saved yet' : 'Choose a saved line + zone first');
+      return;
+    }
+    openHistory(state.zoneRec.id, `${state.lineData ? state.lineData.lineNo : ''} · Zone ${state.zone}`);
+  });
   byId('openPidBtn').addEventListener('click', openPidViewer);
   byId('uploadBtn').addEventListener('click', () => openUploadModal(controller));
   byId('mtoTbody').closest('.entry-col').querySelectorAll('.cos-soon').forEach(btn => {
@@ -923,6 +953,70 @@ function createMtoController(cfg) {
   };
   return controller;
 }
+
+/* ══════════════ MTO REVISION HISTORY (View History) ══════════════ */
+const HISTORY_TAB = { mto: 'MTO Input', dump: 'Model Dump' };
+const histDate = (v) => (v ? new Date(v).toLocaleString() : '—');
+const histPids = (pids) => (pids || []).map(p => `${p.pidName.replace(/^.*-(\d+[A-Z]?(-\d+)?)$/, '$1')} Rev ${p.rev ?? '—'}`).join(', ') || '—';
+
+async function openHistory(zoneId, title) {
+  const modal = document.getElementById('historyModal');
+  document.getElementById('historyTitle').textContent = 'History — ' + title;
+  const tbody = document.getElementById('historyTbody');
+  const detail = document.getElementById('historyDetail');
+  tbody.innerHTML = '<tr><td colspan="8" style="padding:14px;color:var(--text-faint)">Loading…</td></tr>';
+  detail.innerHTML = '';
+  modal.classList.add('open');
+  try {
+    const revs = await DataStore.getZoneRevisions(zoneId);
+    tbody.innerHTML = revs.map(r => `
+      <tr data-rev="${r.revNo}">
+        <td class="td-tag">Rev ${r.revNo}</td>
+        <td>${HISTORY_TAB[r.kind] || r.kind}</td>
+        <td title="${escAttr(r.savedBy)}">${escAttr(r.savedByName || r.savedBy || '—')}</td>
+        <td>${histDate(r.savedAt)}</td>
+        <td class="td-num">${r.rowCount}</td>
+        <td class="td-tag">${escAttr(r.lineNo || '—')}</td>
+        <td title="${escAttr((r.pids || []).map(p => p.pidName + ' Rev ' + (p.rev ?? '—')).join('\n'))}">${escAttr(histPids(r.pids))}</td>
+        <td>${r.lineList ? 'Rev ' + escAttr(r.lineList.revNo) : '—'}</td>
+      </tr>`).join('') || '<tr><td colspan="8" style="padding:14px;color:var(--text-faint)">No revisions yet</td></tr>';
+    tbody.querySelectorAll('tr[data-rev]').forEach(tr => tr.addEventListener('click', async () => {
+      tbody.querySelectorAll('tr.row-active').forEach(x => x.classList.remove('row-active'));
+      tr.classList.add('row-active');
+      showRevision(await DataStore.getZoneRevision(zoneId, Number(tr.dataset.rev)));
+    }));
+    const first = tbody.querySelector('tr[data-rev]');
+    if (first) first.click();
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="8" style="padding:14px;color:var(--color-danger)">${escAttr(err.message)}</td></tr>`;
+  }
+}
+
+function showRevision(rev) {
+  const b = rev.basis || {};
+  const kv = (label, v) => `<div><span>${label}</span>${escAttr(v ?? '—')}</div>`;
+  const headerItems = Object.entries(rev.header || {}).map(([k, v]) => kv(k.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase()), v === true ? 'Yes' : v));
+  document.getElementById('historyDetail').innerHTML = `
+    <h4>Rev ${rev.revNo} · ${HISTORY_TAB[rev.kind] || rev.kind} · saved by ${escAttr(rev.savedByName || rev.savedBy)} · ${histDate(rev.savedAt)}${rev.note ? ' · ' + escAttr(rev.note) : ''}</h4>
+    <h4>Line data at that save (basis)</h4>
+    <div class="hist-kv">
+      ${kv('Line No', b.lineNo)}${kv('Size', b.sizeIn)}${kv('Piping Class', b.pipingSpec)}${kv('INS Type', b.insulationType)}
+      ${kv('OPR Temp 1', b.opTemp)}${kv('OPR Temp 2', b.opTemp2)}${kv('Des Temp1', b.designTemp)}${kv('Des Temp2', b.designTemp2)}
+      ${kv('OPR Pressure', b.opPressure)}${kv('Des Pressure', b.designPressure)}${kv('Source', b.source)}
+      ${kv('Line list', b.lineList ? 'Rev ' + b.lineList.revNo + ' (' + new Date(b.lineList.uploadedAt).toLocaleDateString() + ')' : '— (no upload record)')}
+      ${kv('P&ID', (b.pids || []).map(p => p.pidName + ' Rev ' + (p.rev ?? '— not uploaded')).join(', ') || '—')}
+    </div>
+    <h4>COSMAS header typed</h4>
+    <div class="hist-kv">${headerItems.join('') || '<div>— nothing typed (all from line list / P&ID)</div>'}</div>
+    <h4>Rows (${rev.rowCount})</h4>
+    <table><thead><tr><th>Piping Class</th><th>Input Code</th><th>Item Code</th><th>Dia1</th><th>Dia2</th><th style="text-align:right">Qty</th></tr></thead>
+      <tbody>${(rev.rows || []).map(r => `<tr><td>${escAttr(r.pipingClass ?? '')}</td><td>${escAttr(r.inputCode ?? '')}</td><td>${escAttr(r.itemCode ?? '')}</td><td>${escAttr(r.dia1 ?? '')}</td><td>${escAttr(r.dia2 ?? '')}</td><td class="td-num">${escAttr(r.qty)}</td></tr>`).join('') || '<tr><td colspan="6" style="color:var(--text-faint)">no rows</td></tr>'}</tbody>
+    </table>`;
+}
+
+function closeHistory() { document.getElementById('historyModal').classList.remove('open'); }
+document.getElementById('closeHistoryModal').addEventListener('click', closeHistory);
+document.getElementById('historyModal').addEventListener('click', (e) => { if (e.target.id === 'historyModal') closeHistory(); });
 
 /* ══════════════ P&ID LIBRARY (folders → documents → multi-user highlight status) ══════════════ */
 let pidFolders = [];

@@ -219,6 +219,13 @@ const DataStore = (() => {
   function saveLineZone(payload) {
     return apiFetch('/line-zones', { method: 'PUT', body: JSON.stringify(payload) });
   }
+  // View History: every saved revision (newest first) / one revision in full
+  function getZoneRevisions(id) {
+    return apiFetch(`/line-zones/${id}/revisions`);
+  }
+  function getZoneRevision(id, revNo) {
+    return apiFetch(`/line-zones/${id}/revisions/${revNo}`);
+  }
 
   /* ── P&ID library: ADMIN-curated folders referencing PIMS's own P&ID
      library (pid_master_index/pid_documents) — PIMS is the source of
@@ -280,7 +287,7 @@ const DataStore = (() => {
   return {
     login, ssoLogin, logout, selectAssignment, getSession, clearSession, getUnits, getUnit, setUnit, getPendingAssignment, clearPendingAssignment,
     getServices, getLsrNos, getSublines, getLineData, getZones,
-    getLineZones, getLineZone, saveLineZone,
+    getLineZones, getLineZone, saveLineZone, getZoneRevisions, getZoneRevision,
     getPidFolders, createPidFolder, getPidDocuments,
     getAvailablePimsDocuments, addPidFolderSelection, removePidFolderSelection,
     getPidDocument, getPidDocumentForLine, pidFileUrl, authHeaders,

@@ -96,15 +96,52 @@ async function getItems(kind, zoneId) {
   return rows;
 }
 
-// Everything the page needs for one saved zone
+const REVISION_SUMMARY = `rev_no AS "revNo", kind, saved_by AS "savedBy", saved_at AS "savedAt", row_count AS "rowCount", note`;
+
+async function lastRevision(zoneId) {
+  const { rows } = await query(
+    `SELECT ${REVISION_SUMMARY}, basis FROM mto_line_zone_revisions WHERE line_zone_id = $1 ORDER BY rev_no DESC LIMIT 1`,
+    [zoneId]
+  );
+  return rows[0] || null;
+}
+
+// Everything the page needs for one saved zone, plus what changed in the
+// line data since it was last saved (live basis vs the last revision's basis)
 async function getZoneFull(id) {
   const zone = await getZone(id);
   if (!zone) return null;
-  const [line, mto, dump, extracted] = await Promise.all([
+  const [line, mto, dump, extracted, last] = await Promise.all([
     lineData.getLineData(zone.jobNo, zone.unitNo, zone.service, zone.lsrNo, zone.sublineNo),
-    getItems('mto', id), getItems('dump', id), getItems('extracted', id),
+    getItems('mto', id), getItems('dump', id), getItems('extracted', id), lastRevision(id),
   ]);
-  return { zone, line, mto, dump, extracted };
+  let basisChanges = [];
+  if (last) {
+    basisChanges = line
+      ? lineData.compareBasis(last.basis, await lineData.getBasis(zone.jobNo, line))
+      : [{ field: 'line', label: 'Line', was: last.basis.lineNo, now: 'no longer in the line list / P&IDs' }];
+  }
+  const lastRev = last ? (({ basis, ...rest }) => rest)(last) : null;
+  return { zone, line, mto, dump, extracted, lastRevision: lastRev, basisChanges };
+}
+
+// Revision history of a zone (newest first) and one revision in full
+async function listRevisions(zoneId) {
+  const { rows } = await query(
+    `SELECT ${REVISION_SUMMARY},
+            basis->>'lineNo' AS "lineNo", basis->>'pipingSpec' AS "pipingClass", basis->'pids' AS pids, basis->'lineList' AS "lineList"
+     FROM mto_line_zone_revisions WHERE line_zone_id = $1 ORDER BY rev_no DESC`,
+    [zoneId]
+  );
+  return rows;
+}
+
+async function getRevision(zoneId, revNo) {
+  const { rows } = await query(
+    `SELECT ${REVISION_SUMMARY}, basis, header, rows FROM mto_line_zone_revisions WHERE line_zone_id = $1 AND rev_no = $2`,
+    [zoneId, revNo]
+  );
+  return rows[0] || null;
 }
 
 // Save = upsert the line + zone with its header, and replace the BoM rows of
@@ -118,6 +155,7 @@ async function saveZone({ jobNo, unitNo, empId, service, lsrNo, sublineNo, zone,
   if (!line) throw new InputError('This line is not in the line list or the uploaded P&IDs');
   const h = cleanHeader(header);
   const values = cleanRows(rows);
+  const basis = await lineData.getBasis(jobNo, line);   // what this save is based on
 
   const cols = Object.keys(h);
   const client = await pool.connect();
@@ -143,6 +181,16 @@ async function saveZone({ jobNo, unitNo, empId, service, lsrNo, sublineNo, zone,
       const status = values.length ? (saved.status === 'complete' ? 'complete' : 'inprogress') : 'pending';
       await client.query(`UPDATE mto_line_zones SET items_count = $2, status = $3 WHERE id = $1`, [saved.id, values.length, status]);
     }
+    // One revision per save: header + rows as saved, and the line data they were based on.
+    // The zone row is locked by the upsert above, so revision numbers can't collide.
+    const headerSaved = Object.fromEntries(Object.entries(HEADER).map(([k, [c]]) => [k, h[c]]).filter(([, v]) => v != null));
+    if (h.bolt_tensioning) headerSaved.boltTensioning = true;
+    const rowsSaved = values.map(([pipingClass, inputCode, itemCode, dia1, dia2, qty]) => ({ pipingClass, inputCode, itemCode, dia1, dia2, qty }));
+    await client.query(
+      `INSERT INTO mto_line_zone_revisions (line_zone_id, rev_no, kind, saved_by, basis, header, rows, row_count)
+       VALUES ($1, (SELECT coalesce(max(rev_no), 0) + 1 FROM mto_line_zone_revisions WHERE line_zone_id = $1), $2, $3, $4, $5, $6, $7)`,
+      [saved.id, kind, empId, JSON.stringify(basis), JSON.stringify(headerSaved), JSON.stringify(rowsSaved), rowsSaved.length]
+    );
     await client.query('COMMIT');
     return getZoneFull(saved.id);
   } catch (err) {
@@ -153,4 +201,4 @@ async function saveZone({ jobNo, unitNo, empId, service, lsrNo, sublineNo, zone,
   }
 }
 
-module.exports = { listZones, zonesForLine, getZone, getZoneFull, saveZone, normalizeZone, InputError };
+module.exports = { listZones, zonesForLine, getZone, getZoneFull, saveZone, listRevisions, getRevision, normalizeZone, InputError };

@@ -172,6 +172,27 @@ CREATE TABLE IF NOT EXISTS sppid_extracted_data (
   qty           NUMERIC NOT NULL DEFAULT 0
 );
 
+-- MTO revision history: every Save of a line + zone adds one row, never
+-- overwritten. `basis` is the line data exactly as it was when saved (line
+-- no., size, piping class, insulation, P&T, the P&ID names + revisions and the
+-- line-list revision it came from), so any MTO can be traced back to what it
+-- was based on — the line data itself is otherwise only ever read live.
+-- `header` / `rows` are the COSMAS header and the BoM rows of that tab as saved.
+CREATE TABLE IF NOT EXISTS mto_line_zone_revisions (
+  id            SERIAL PRIMARY KEY,
+  line_zone_id  INTEGER NOT NULL REFERENCES mto_line_zones(id) ON DELETE CASCADE,
+  rev_no        INTEGER NOT NULL,
+  kind          VARCHAR(10) NOT NULL CHECK (kind IN ('mto','dump')),
+  saved_by      VARCHAR(50),
+  saved_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  basis         JSONB NOT NULL,
+  header        JSONB NOT NULL,
+  rows          JSONB NOT NULL,
+  row_count     INTEGER NOT NULL,
+  note          TEXT,
+  UNIQUE (line_zone_id, rev_no)
+);
+
 -- ── One-time move from the old `lines` table (it copied line data from the
 -- sources and created a row as soon as a zone was picked). Each old line +
 -- zone becomes an mto_line_zones row (LSR NO / Subline split from seq_no,

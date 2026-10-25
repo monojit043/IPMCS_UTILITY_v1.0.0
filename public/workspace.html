@@ -189,6 +189,7 @@
                       <span class="cos-key-formula" title="Contr_Code+service+unit+lsrno+subline+dwg.indicator+area no">ⓘ</span>:
                       <span class="ld-val" id="ld_lineKey">—</span></span>
                   </div>
+                  <div class="cos-changed" id="ld_changed" style="display:none"></div>
                   <div class="cos-fields">
                     <div class="field">
                       <label class="field-label">Contr.Code</label>
@@ -298,7 +299,7 @@
                     <button class="btn btn-ghost btn-sm cos-soon" data-label="Copy to BULK BoM"><i class="ti ti-copy"></i>Copy to BULK BoM</button>
                     <button class="btn btn-outline btn-sm" id="exportBtn"><i class="ti ti-file-spreadsheet"></i>Export Line Data to Excel</button>
                     <button class="btn btn-ghost btn-sm cos-soon" data-label="Import Line Data From Excel"><i class="ti ti-file-import"></i>Import Line Data From Excel</button>
-                    <button class="btn btn-ghost btn-sm cos-soon" data-label="View History"><i class="ti ti-history"></i>View History</button>
+                    <button class="btn btn-ghost btn-sm" id="historyBtn"><i class="ti ti-history"></i>View History</button>
                     <button class="btn btn-ghost btn-sm" id="openPidBtn"><i class="ti ti-highlight"></i>Open &amp; Highlight P&amp;ID</button>
                     <button class="btn btn-ghost btn-sm" id="uploadBtn"><i class="ti ti-upload"></i>Model Dump</button>
                   </div>
@@ -402,6 +403,7 @@
                       <span class="cos-key-formula" title="Contr_Code+service+unit+lsrno+subline+dwg.indicator+area no">ⓘ</span>:
                       <span class="ld-val" id="dc_ld_lineKey">—</span></span>
                   </div>
+                  <div class="cos-changed" id="dc_ld_changed" style="display:none"></div>
                   <div class="cos-fields">
                     <div class="field">
                       <label class="field-label">Contr.Code</label>
@@ -511,7 +513,7 @@
                     <button class="btn btn-ghost btn-sm cos-soon" data-label="Copy to BULK BoM"><i class="ti ti-copy"></i>Copy to BULK BoM</button>
                     <button class="btn btn-outline btn-sm" id="dc_exportBtn"><i class="ti ti-file-spreadsheet"></i>Export Line Data to Excel</button>
                     <button class="btn btn-ghost btn-sm cos-soon" data-label="Import Line Data From Excel"><i class="ti ti-file-import"></i>Import Line Data From Excel</button>
-                    <button class="btn btn-ghost btn-sm cos-soon" data-label="View History"><i class="ti ti-history"></i>View History</button>
+                    <button class="btn btn-ghost btn-sm" id="dc_historyBtn"><i class="ti ti-history"></i>View History</button>
                     <button class="btn btn-ghost btn-sm" id="dc_openPidBtn"><i class="ti ti-highlight"></i>Open &amp; Highlight P&amp;ID</button>
                     <button class="btn btn-ghost btn-sm" id="dc_uploadBtn"><i class="ti ti-upload"></i>Model Dump</button>
                   </div>
@@ -751,6 +753,25 @@
 </div>
 
 <!-- UPLOAD MODAL -->
+<!-- ═══ MTO REVISION HISTORY ═══ -->
+<div class="modal-overlay" id="historyModal">
+  <div class="modal modal-wide">
+    <div class="modal-header">
+      <i class="ti ti-history" style="font-size:18px;color:var(--color-accent-strong)"></i>
+      <div class="modal-title" id="historyTitle">History</div>
+      <div class="modal-close" id="closeHistoryModal"><i class="ti ti-x"></i></div>
+    </div>
+    <div class="modal-body">
+      <div class="hist-sub">Every Save is kept with the line data it was based on.</div>
+      <div class="table-wrap hist-list"><table>
+        <thead><tr><th>Rev</th><th>Tab</th><th>Saved by</th><th>Saved at</th><th style="text-align:right">Rows</th><th>Line No (at save)</th><th>P&amp;ID (rev)</th><th>Line list</th></tr></thead>
+        <tbody id="historyTbody"></tbody>
+      </table></div>
+      <div id="historyDetail" class="hist-detail"></div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="uploadModal">
   <div class="modal">
     <div class="modal-header">

@@ -1,6 +1,7 @@
 const HttpError = require('../middlewares/HttpError');
 const lineData = require('../services/lineData.service');
 const lineZones = require('../services/lineZones.service');
+const { namesFor } = require('../services/auth.service');
 
 // ── Line selection: Service → LSR NO → Subline No. (live from ePULSE) ──
 async function services(req, res) {
@@ -48,6 +49,29 @@ async function getZone(req, res) {
   res.json(full);
 }
 
+// Only zones of the user's own job / unit
+async function ownZone(req) {
+  const zone = await lineZones.getZone(req.params.id);
+  if (!zone || zone.jobNo !== req.user.jobNo || zone.unitNo !== req.user.unitNo) throw new HttpError(404, 'Line zone not found');
+  return zone;
+}
+
+// View History: every saved revision of a line + zone, newest first
+async function listRevisions(req, res) {
+  await ownZone(req);
+  const revs = await lineZones.listRevisions(req.params.id);
+  const names = await namesFor(revs.map((r) => r.savedBy));
+  res.json(revs.map((r) => ({ ...r, savedByName: names.get(String(r.savedBy || '').toUpperCase()) || r.savedBy })));
+}
+
+async function getRevision(req, res) {
+  await ownZone(req);
+  const rev = await lineZones.getRevision(req.params.id, Number(req.params.rev));
+  if (!rev) throw new HttpError(404, 'Revision not found');
+  const names = await namesFor([rev.savedBy]);
+  res.json({ ...rev, savedByName: names.get(String(rev.savedBy || '').toUpperCase()) || rev.savedBy });
+}
+
 async function saveZone(req, res) {
   const { service, lsrNo, sublineNo, zone, header, kind, rows } = req.body || {};
   if (!service || !lsrNo || !zone) throw new HttpError(400, 'service, lsrNo and zone are required');
@@ -62,4 +86,4 @@ async function saveZone(req, res) {
   }
 }
 
-module.exports = { services, lsrNos, sublines, data, zones, listZones, getZone, saveZone };
+module.exports = { services, lsrNos, sublines, data, zones, listZones, getZone, saveZone, listRevisions, getRevision };
