@@ -186,6 +186,34 @@ async function getBasis(jobNo, line) {
   };
 }
 
+// Same as getBasis for many lines of one job (reports): two queries in all
+async function getBasisBulk(jobNo, lines) {
+  const namesOf = (l) => String((l && l.pidNo) || '').split(',').map((s) => s.trim()).filter(Boolean);
+  const allNames = [...new Set(lines.flatMap(namesOf))];
+  const [{ rows: pids }, { rows: ll }] = await Promise.all([
+    allNames.length
+      ? queryEpulse(
+        `SELECT mi.pid_name AS "pidName", d.rev_label AS rev, d.id AS "documentId"
+         FROM pid_master_index mi JOIN pid_documents d ON d.master_index_id = mi.id AND d.status = 'current'
+         WHERE mi.job_no = $1 AND mi.pid_name = ANY($2)`,
+        [jobNo, allNames])
+      : { rows: [] },
+    queryEpulse(
+      `SELECT id AS "uploadId", rev_no AS "revNo", uploaded_at AS "uploadedAt"
+       FROM linelist_uploads WHERE job_no = $1 AND is_latest ORDER BY id DESC LIMIT 1`,
+      [jobNo]
+    ),
+  ]);
+  const byName = new Map(pids.map((p) => [p.pidName, p]));
+  return lines.map((line) => (line ? {
+    ...Object.fromEntries(Object.keys(BASIS_FIELDS).map((k) => [k, line[k] ?? null])),
+    lsrNo: line.lsrNo, sublineNo: line.sublineNo, service: line.service, unitNo: line.unitNo,
+    dataMismatch: line.dataMismatch || null,
+    pids: namesOf(line).sort().map((n) => byName.get(n) || { pidName: n, rev: null, documentId: null }),
+    lineList: ll[0] || null,
+  } : null));
+}
+
 // What changed between a saved basis and now — [{ field, label, was, now }]
 function compareBasis(saved, now) {
   if (!saved || !now) return [];
@@ -205,4 +233,4 @@ function compareBasis(saved, now) {
   return out;
 }
 
-module.exports = { getServices, getLsrNos, getSublines, getLineData, getLineDataBulk, getBasis, compareBasis, BASIS_FIELDS };
+module.exports = { getServices, getLsrNos, getSublines, getLineData, getLineDataBulk, getBasis, getBasisBulk, compareBasis, BASIS_FIELDS };

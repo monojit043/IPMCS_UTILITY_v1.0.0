@@ -391,3 +391,12 @@ input.inline-input:focus { border-color: var(--color-accent); box-shadow: 0 0 0 
 .mp-note { font-size: 11px; color: var(--text-muted); line-height: 1.5; }
 .mp-zones table { width: 100%; }
 .mp-zones tfoot td { font-weight: 700; border-top: 1px solid var(--color-border-strong); padding: 4px 8px; }
+
+/* ── Reports ── */
+.rep-sub { font-size: 11px; color: var(--text-muted); padding: 8px 14px 0; }
+.rep-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 10px; padding: 10px 14px; overflow: auto; }
+.rep-card { display: flex; align-items: flex-start; gap: 12px; padding: 12px; background: var(--color-surface-alt); border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+.rep-icon { font-size: 20px; color: var(--color-accent-strong); margin-top: 2px; }
+.rep-body { flex: 1; min-width: 0; }
+.rep-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.rep-desc { font-size: 11px; color: var(--text-muted); margin-top: 3px; line-height: 1.45; }

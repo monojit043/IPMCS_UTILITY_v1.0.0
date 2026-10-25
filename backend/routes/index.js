@@ -6,6 +6,7 @@ const authRoutes = require('./auth.routes');
 const linesRoutes = require('./lines.routes');
 const lineZonesRoutes = require('./lineZones.routes');
 const pidRoutes = require('./pid.routes');
+const reportsRoutes = require('./reports.routes');
 
 const router = express.Router();
 
@@ -16,5 +17,6 @@ router.use('/auth', authRoutes);
 router.use('/lines', requireAuth, applyUnit, linesRoutes);
 router.use('/line-zones', requireAuth, applyUnit, lineZonesRoutes);
 router.use('/pid', requireAuth, applyUnit, pidRoutes);
+router.use('/reports', requireAuth, applyUnit, reportsRoutes);
 
 module.exports = router;

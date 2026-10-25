@@ -218,7 +218,7 @@ function bindGlobalEvents() {
 /* ══════════════ SECTION NAV ══════════════ */
 const SECTION_VIEWS = {
   summary: 'summaryView', mto: 'mtoView',
-  'upload-ipmcs': 'uploadIpmcsView', 'upload-model': 'uploadModelView',
+  'upload-ipmcs': 'uploadIpmcsView', 'upload-model': 'uploadModelView', reports: 'reportsView',
 };
 
 function switchSection(section) {
@@ -235,6 +235,9 @@ function switchSection(section) {
     loadMtoProgress();
   } else if (section === 'mto') {
     switchTab('input');
+  } else if (section === 'reports') {
+    document.getElementById('reportsScope').textContent =
+      `${currentUser.jobNo || ''} · Unit ${DataStore.getUnit() || '—'}`;
   }
 }
 
@@ -308,6 +311,35 @@ function renderMtoProgress(s) {
     </div>`;
   box.innerHTML = linesCard + zonesCard;
 }
+
+/* ══════════════ REPORTS: CSV downloads for the job + current unit ══════════════ */
+async function downloadReport(type, btn) {
+  const original = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-loader-2"></i>Preparing…';
+  try {
+    const res = await fetch(`/api/reports/${encodeURIComponent(type)}`, { cache: 'no-store', headers: DataStore.authHeaders() });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || res.statusText);
+    }
+    const name = ((res.headers.get('Content-Disposition') || '').match(/filename="([^"]+)"/) || [])[1] || `${type}.csv`;
+    const rows = res.headers.get('X-Report-Rows');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(await res.blob());
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    showToast('success', 'Report downloaded', `${name}${rows != null ? ` · ${rows} rows` : ''}`);
+  } catch (err) {
+    showToast('error', 'Could not download report', err.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = original;
+  }
+}
+document.querySelectorAll('[data-report]').forEach(btn =>
+  btn.addEventListener('click', () => downloadReport(btn.dataset.report, btn)));
 
 /* ══════════════ MTO SUMMARY badges ══════════════
    The saved-zones list was removed from MTO Summary (user, 2026-10-25) — the
