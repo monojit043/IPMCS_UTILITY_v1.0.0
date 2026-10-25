@@ -1,4 +1,4 @@
-const { pool, query } = require('../config/db');
+const { pool, query, queryEpulse } = require('../config/db');
 const lineData = require('./lineData.service');
 
 // mto_line_zones: what an engineer saves for one line + zone — the COSMAS
@@ -74,14 +74,31 @@ async function listZones(jobNo, unitNo) {
   return rows.map((z) => ({ ...z, line: data.get(dataKey(z)) || null }));
 }
 
-// Zones already saved for one line ("A" offered when none)
+// Zones for one line: the zones ePULSE's zone plan (piping_line_list) gives
+// it, plus any zone already saved in IPMCS — each with its state.
+// unitHasPlan tells the page whether this unit has a zone plan at all.
 async function zonesForLine(jobNo, unitNo, service, lsrNo, sublineNo) {
-  const { rows } = await query(
-    `SELECT id, zone, status, items_count AS items FROM mto_line_zones
-     WHERE job_no = $1 AND unit_no = $2 AND service = $3 AND lsr_no = $4 AND subline_no = $5 ORDER BY zone`,
-    [jobNo, unitNo, service, lsrNo, sublineNo || '']
-  );
-  return rows;
+  const seq = sublineNo ? `${lsrNo}-${sublineNo}` : lsrNo;
+  const [{ rows: saved }, { rows: planned }, { rows: [plan] }] = await Promise.all([
+    query(
+      `SELECT id, zone, status, items_count AS items FROM mto_line_zones
+       WHERE job_no = $1 AND unit_no = $2 AND service = $3 AND lsr_no = $4 AND subline_no = $5`,
+      [jobNo, unitNo, service, lsrNo, sublineNo || '']
+    ),
+    queryEpulse(
+      `SELECT DISTINCT upper(zone) AS zone FROM piping_line_list
+       WHERE job_no = $1 AND unit_no = $2 AND service = $3 AND seq_no = $4`,
+      [jobNo, unitNo, service, seq]
+    ),
+    queryEpulse(`SELECT EXISTS (SELECT 1 FROM piping_line_list WHERE job_no = $1 AND unit_no = $2) AS has`, [jobNo, unitNo]),
+  ]);
+  const byZone = new Map(saved.map((z) => [z.zone, { ...z, planned: false }]));
+  planned.forEach(({ zone }) => {
+    if (byZone.has(zone)) byZone.get(zone).planned = true;
+    else byZone.set(zone, { id: null, zone, status: null, items: 0, planned: true });
+  });
+  const zones = [...byZone.values()].sort((a, b) => a.zone.localeCompare(b.zone));
+  return { zones, unitHasPlan: plan.has };
 }
 
 async function getZone(id) {

@@ -463,29 +463,43 @@ function createMtoController(cfg) {
     return true;
   }
 
-  // Zones already saved for this line, else "A"; plus "+ Add zone…"
+  // Zones offered: the line's planned zones (ePULSE zone plan) + zones already
+  // saved in IPMCS, each labelled with its state. "A" when there is neither.
   async function fillZones() {
     const d = state.lineData;
-    const saved = await DataStore.getZones(d.service, d.lsrNo, d.sublineNo);
-    const zones = saved.length ? saved.map(z => z.zone) : ['A'];
-    fillSelect(byId('li_zone'), zones, 'Select…',
-      Object.fromEntries(saved.map(z => [z.zone, `${z.zone}  (${z.items} rows · ${LINE_STATUS_TEXT[z.status]})`])));
+    const { zones, unitHasPlan } = await DataStore.getZones(d.service, d.lsrNo, d.sublineNo);
+    state.unitHasPlan = unitHasPlan;
+    state.plannedZones = zones.filter(z => z.planned).map(z => z.zone);
+    state.savedZones = zones.filter(z => z.id);
+    const label = (z) => {
+      const parts = [];
+      if (unitHasPlan) parts.push(z.planned ? 'planned' : 'not in plan');
+      parts.push(z.id ? `${z.items} rows · ${LINE_STATUS_TEXT[z.status]}` : 'not started');
+      return `${z.zone}  (${parts.join(' · ')})`;
+    };
+    if (zones.length) {
+      fillSelect(byId('li_zone'), zones.map(z => z.zone), 'Select…', Object.fromEntries(zones.map(z => [z.zone, label(z)])));
+    } else {
+      fillSelect(byId('li_zone'), ['A'], 'Select…', { A: unitHasPlan ? 'A  (line not in zone plan)' : 'A' });
+    }
     byId('li_zone').insertAdjacentHTML('beforeend', `<option value="${NEW_ZONE}">+ Add zone…</option>`);
-    state.savedZones = saved;
   }
 
   async function onZoneChange() {
     if (!confirmDiscard()) return revertTo('li_zone', state.zone);
     let zone = byId('li_zone').value;
     if (zone === NEW_ZONE) {
-      const typed = (prompt('New zone for this line (1–3 letters or digits, e.g. B):') || '').trim().toUpperCase();
+      const planNote = state.unitHasPlan
+        ? `\n\nZone plan for this line: ${state.plannedZones.length ? state.plannedZones.join(', ') : 'none'}. A zone outside the plan is counted as "Not in plan" in the MTO Summary.`
+        : '';
+      const typed = (prompt(`New zone for this line (1–3 letters or digits, e.g. B):${planNote}`) || '').trim().toUpperCase();
       if (!/^[A-Z0-9]{1,3}$/.test(typed)) {
         byId('li_zone').value = state.zone || '';
         if (typed) showToast('error', 'Invalid zone', 'Use 1–3 letters or digits, e.g. B');
         return;
       }
       if (![...byId('li_zone').options].some(o => o.value === typed)) {
-        byId('li_zone').querySelector(`option[value="${NEW_ZONE}"]`).insertAdjacentHTML('beforebegin', `<option value="${typed}">${typed}  (new)</option>`);
+        byId('li_zone').querySelector(`option[value="${NEW_ZONE}"]`).insertAdjacentHTML('beforebegin', `<option value="${typed}">${typed}  (${state.unitHasPlan && !state.plannedZones.includes(typed) ? 'not in plan · ' : ''}new)</option>`);
       }
       byId('li_zone').value = zone = typed;
     }
