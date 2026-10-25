@@ -269,7 +269,7 @@
                   <div class="ls-stat"><span class="dot dot-success"></span>Matched<span class="ls-val" id="lsMatched">0</span></div>
                   <div class="ls-stat"><span class="dot dot-warning"></span>Qty Mismatch<span class="ls-val" id="lsMismatch">0</span></div>
                   <div class="ls-stat"><span class="dot dot-accent"></span>Manual Only<span class="ls-val" id="lsManualOnly">0</span></div>
-                  <div class="ls-stat"><span class="dot dot-danger"></span>Extracted Only<span class="ls-val" id="lsExtractedOnly">0</span></div>
+                  <div class="ls-stat"><span class="dot dot-danger"></span>SPPID Only<span class="ls-val" id="lsExtractedOnly">0</span></div>
                 </div>
               </div>
 
@@ -333,12 +333,12 @@
                 </div>
 
                 <div class="extracted-col">
-                  <div class="col-head"><i class="ti ti-topology-star"></i><span>MTO Extracted from SP P&amp;ID</span><span class="badge badge-muted" id="extractedCountBadge">0 items</span></div>
+                  <div class="col-head"><i class="ti ti-topology-star"></i><span>SPPID Extracted Data</span><span class="badge badge-muted" id="extractedCountBadge">0 items</span></div>
 
                   <div class="empty-state" id="extractedEmptyState">
                     <i class="ti ti-topology-star empty-icon"></i>
                     <div class="empty-msg">No extraction available</div>
-                    <div class="empty-sub">Select a line to view its Smart P&amp;ID extracted quantities</div>
+                    <div class="empty-sub">Select a line and zone to see its SPPID extracted data</div>
                   </div>
 
                   <div class="table-wrap" id="extractedTableWrap" style="display:none">
@@ -475,14 +475,14 @@
                 </div>
               </div>
 
-              <!-- LINE SUMMARY: Dump Items vs SP P&ID mismatch -->
+              <!-- LINE SUMMARY: Model Dump Data vs SPPID Extracted Data -->
               <div class="line-summary-panel">
                 <div class="ls-title">Line Summary</div>
                 <div class="ls-stats">
                   <div class="ls-stat"><span class="dot dot-success"></span>Matched<span class="ls-val" id="dc_lsMatched">0</span></div>
                   <div class="ls-stat"><span class="dot dot-warning"></span>Qty Mismatch<span class="ls-val" id="dc_lsMismatch">0</span></div>
-                  <div class="ls-stat"><span class="dot dot-accent"></span>Dump Only<span class="ls-val" id="dc_lsManualOnly">0</span></div>
-                  <div class="ls-stat"><span class="dot dot-danger"></span>Extracted Only<span class="ls-val" id="dc_lsExtractedOnly">0</span></div>
+                  <div class="ls-stat"><span class="dot dot-accent"></span>Model Dump Only<span class="ls-val" id="dc_lsManualOnly">0</span></div>
+                  <div class="ls-stat"><span class="dot dot-danger"></span>SPPID Only<span class="ls-val" id="dc_lsExtractedOnly">0</span></div>
                 </div>
               </div>
 
@@ -490,7 +490,7 @@
               <div class="entry-split">
 
                 <div class="entry-col">
-                  <div class="col-head"><i class="ti ti-file-diff"></i><span>Bill of Material — Dump Items</span></div>
+                  <div class="col-head"><i class="ti ti-file-diff"></i><span>Bill of Material — Model Dump Data</span></div>
                   <div class="mto-toolbar">
                     <button class="btn btn-primary btn-sm" id="dc_addItemBtn"><i class="ti ti-row-insert-bottom"></i>Insert</button>
                     <button class="btn btn-ghost btn-sm" id="dc_dupItemBtn"><i class="ti ti-copy"></i>Duplicate</button>
@@ -546,12 +546,12 @@
                 </div>
 
                 <div class="extracted-col">
-                  <div class="col-head"><i class="ti ti-topology-star"></i><span>MTO Extracted from SP P&amp;ID</span><span class="badge badge-muted" id="dc_extractedCountBadge">0 items</span></div>
+                  <div class="col-head"><i class="ti ti-topology-star"></i><span>SPPID Extracted Data</span><span class="badge badge-muted" id="dc_extractedCountBadge">0 items</span></div>
 
                   <div class="empty-state" id="dc_extractedEmptyState">
                     <i class="ti ti-topology-star empty-icon"></i>
                     <div class="empty-msg">No extraction available</div>
-                    <div class="empty-sub">Select a line to view its Smart P&amp;ID extracted quantities</div>
+                    <div class="empty-sub">Select a line and zone to see its SPPID extracted data</div>
                   </div>
 
                   <div class="table-wrap" id="dc_extractedTableWrap" style="display:none">

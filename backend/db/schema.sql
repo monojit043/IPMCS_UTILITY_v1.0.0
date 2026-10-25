@@ -92,9 +92,38 @@ CREATE TABLE IF NOT EXISTS mto_line_zones (
 );
 CREATE INDEX IF NOT EXISTS idx_mto_line_zones_unit ON mto_line_zones (job_no, unit_no);
 
--- Bill of Material rows of a line + zone: manual MTO, model-dump MTO, and
--- the Smart P&ID extraction they are compared with. COSMAS columns:
+-- One-time (2026-10-25): dump_items → model_dump_data and
+-- extracted_items → sppid_extracted_data (with their id sequences / indexes).
+DO $$
+DECLARE r record;
+BEGIN
+  IF to_regclass('public.dump_items') IS NOT NULL AND to_regclass('public.model_dump_data') IS NULL THEN
+    ALTER TABLE dump_items RENAME TO model_dump_data;
+    ALTER SEQUENCE IF EXISTS dump_items_id_seq RENAME TO model_dump_data_id_seq;
+    ALTER INDEX IF EXISTS idx_dump_items_zone RENAME TO idx_model_dump_data_zone;
+  END IF;
+  IF to_regclass('public.extracted_items') IS NOT NULL AND to_regclass('public.sppid_extracted_data') IS NULL THEN
+    ALTER TABLE extracted_items RENAME TO sppid_extracted_data;
+    ALTER SEQUENCE IF EXISTS extracted_items_id_seq RENAME TO sppid_extracted_data_id_seq;
+    ALTER INDEX IF EXISTS idx_extracted_items_zone RENAME TO idx_sppid_extracted_data_zone;
+  END IF;
+  -- constraint names (primary / foreign keys) follow the new table names
+  FOR r IN SELECT conrelid::regclass::text AS tbl, conname,
+                  CASE WHEN conname LIKE 'dump\_items%' THEN 'model_dump_data' || substr(conname, 11)
+                       ELSE 'sppid_extracted_data' || substr(conname, 16) END AS newname
+           FROM pg_constraint
+           WHERE conrelid IN (to_regclass('public.model_dump_data'), to_regclass('public.sppid_extracted_data'))
+             AND (conname LIKE 'dump\_items%' OR conname LIKE 'extracted\_items%') LOOP
+    EXECUTE format('ALTER TABLE %s RENAME CONSTRAINT %I TO %I', r.tbl, r.conname, r.newname);
+  END LOOP;
+END $$;
+
+-- Bill of Material rows of a line + zone, all in COSMAS columns:
 -- Piping Class (spec) | Input Code | Item Code | Dia1 (size) | Dia2 | Qty.
+--   mto_items            — manual MTO (MTO Input tab)
+--   model_dump_data      — MTO from the 3D model dump (MTO from Dump Check tab)
+--   sppid_extracted_data — quantities extracted from the SmartPlant P&ID,
+--                          the reference both tabs are compared with
 CREATE TABLE IF NOT EXISTS mto_items (
   id            SERIAL PRIMARY KEY,
   line_zone_id  INTEGER NOT NULL REFERENCES mto_line_zones(id) ON DELETE CASCADE,
@@ -105,7 +134,7 @@ CREATE TABLE IF NOT EXISTS mto_items (
   dia2          VARCHAR(20),
   qty           NUMERIC NOT NULL DEFAULT 0
 );
-CREATE TABLE IF NOT EXISTS dump_items (
+CREATE TABLE IF NOT EXISTS model_dump_data (
   id            SERIAL PRIMARY KEY,
   line_zone_id  INTEGER NOT NULL REFERENCES mto_line_zones(id) ON DELETE CASCADE,
   spec          VARCHAR(40),
@@ -115,7 +144,7 @@ CREATE TABLE IF NOT EXISTS dump_items (
   dia2          VARCHAR(20),
   qty           NUMERIC NOT NULL DEFAULT 0
 );
-CREATE TABLE IF NOT EXISTS extracted_items (
+CREATE TABLE IF NOT EXISTS sppid_extracted_data (
   id            SERIAL PRIMARY KEY,
   line_zone_id  INTEGER NOT NULL REFERENCES mto_line_zones(id) ON DELETE CASCADE,
   spec          VARCHAR(40),
@@ -144,7 +173,7 @@ BEGIN
     FROM lines
     ON CONFLICT DO NOTHING;
 
-    FOREACH t IN ARRAY ARRAY['mto_items', 'dump_items', 'extracted_items'] LOOP
+    FOREACH t IN ARRAY ARRAY['mto_items', 'model_dump_data', 'sppid_extracted_data'] LOOP
       IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = t AND column_name = 'line_id') THEN
         EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS line_zone_id INTEGER REFERENCES mto_line_zones(id) ON DELETE CASCADE', t);
         EXECUTE format($q$
@@ -165,8 +194,8 @@ BEGIN
 END $$;
 
 CREATE INDEX IF NOT EXISTS idx_mto_items_zone ON mto_items (line_zone_id);
-CREATE INDEX IF NOT EXISTS idx_dump_items_zone ON dump_items (line_zone_id);
-CREATE INDEX IF NOT EXISTS idx_extracted_items_zone ON extracted_items (line_zone_id);
+CREATE INDEX IF NOT EXISTS idx_model_dump_data_zone ON model_dump_data (line_zone_id);
+CREATE INDEX IF NOT EXISTS idx_sppid_extracted_data_zone ON sppid_extracted_data (line_zone_id);
 
 -- P&ID library: ADMIN-curated folders (e.g. "MTO-1") that reference sheets
 -- of ePULSE's P&ID module (pid_master_index ids) — ePULSE is the source of

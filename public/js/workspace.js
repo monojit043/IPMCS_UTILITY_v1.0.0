@@ -49,7 +49,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     kind: 'dump',
     prefix: 'dc_',
     onSaved: (full) => inputCtrl.zoneSavedElsewhere(full),
-    onlyLabel: 'Dump Only',
+    onlyLabel: 'Model Dump Only',
     drivesShared: false,
     lsIds: { matched: 'lsMatched', mismatch: 'lsMismatch', only: 'lsManualOnly', extractedOnly: 'lsExtractedOnly' },
   });
@@ -305,7 +305,7 @@ function renderSummaryTable(query) {
    Flow: Service → LSR NO → Subline No. shows the LINE DATA straight away
    (read live from the line list / P&ID — nothing saved). Then the engineer
    picks or adds a Zone and enters MTO; Save writes the line + zone, its COSMAS
-   header and the BoM rows to mto_line_zones (+ mto_items / dump_items).
+   header and the BoM rows to mto_line_zones (+ mto_items / model_dump_data).
    Each tab has its own selection; `p` is the element-id prefix ('' or 'dc_').
    Row edits, inserts and deletes stay local until Save (Undo works on them). */
 const COSMAS_KEYS = [
@@ -639,8 +639,8 @@ function createMtoController(cfg) {
       wrap.style.display = 'none'; empty.style.display = 'flex';
       empty.querySelector('.empty-msg').textContent = 'No extraction available';
       empty.querySelector('.empty-sub').textContent = state.zone
-        ? 'This line has no Smart P&ID extraction yet'
-        : 'Select a line and zone to view its Smart P&ID extracted quantities';
+        ? 'No SPPID extracted data for this line yet'
+        : 'Select a line and zone to see its SPPID extracted data';
       byId('extractedCountBadge').textContent = '0 items';
       return;
     }

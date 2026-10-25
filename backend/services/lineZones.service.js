@@ -20,7 +20,8 @@ const ZONE_COLUMNS = `
   created_by AS "createdBy", created_at AS "createdAt", updated_by AS "updatedBy", updated_at AS "updatedAt"
 `;
 const ITEM_COLUMNS = `id, spec AS "pipingClass", input_code AS "inputCode", item_code AS "itemCode", size AS dia1, dia2, qty`;
-const ITEM_TABLES = { mto: 'mto_items', dump: 'dump_items' };
+// BoM tables per tab; 'extracted' = SmartPlant P&ID reference (read-only here)
+const ITEM_TABLES = { mto: 'mto_items', dump: 'model_dump_data' };
 
 const ZONE_RE = /^[A-Z0-9]{1,3}$/;
 function normalizeZone(zone) {
@@ -90,7 +91,7 @@ async function getZone(id) {
 }
 
 async function getItems(kind, zoneId) {
-  const table = kind === 'extracted' ? 'extracted_items' : ITEM_TABLES[kind];
+  const table = kind === 'extracted' ? 'sppid_extracted_data' : ITEM_TABLES[kind];
   const { rows } = await query(`SELECT ${ITEM_COLUMNS} FROM ${table} WHERE line_zone_id = $1 ORDER BY id`, [zoneId]);
   return rows;
 }
