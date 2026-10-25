@@ -118,7 +118,7 @@ async function switchUnit(unitNo) {
   try {
     allLines = await loadAllLines();
     await Promise.all([inputCtrl.resetForUnit(), dumpCtrl.resetForUnit()]);
-    renderSummaryTable(document.getElementById('summarySearch').value);
+    renderSummaryTable();
     if (activeSection === 'summary') loadMtoProgress();
     showToast('success', `Unit ${unitNo}`, 'Lines and pick lists now show this unit');
   } catch (err) {
@@ -187,19 +187,6 @@ function bindGlobalEvents() {
     btn.addEventListener('click', () => switchTab(btn.dataset.tab));
   });
 
-  document.getElementById('summarySearch').addEventListener('input', (e) => renderSummaryTable(e.target.value));
-  let activeFilter = 'all';
-  document.querySelectorAll('.chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-      chip.classList.add('active');
-      activeFilter = chip.dataset.filter;
-      window.summaryFilter = activeFilter;
-      renderSummaryTable(document.getElementById('summarySearch').value);
-    });
-  });
-  window.summaryFilter = 'all';
-
   document.getElementById('closeAddModal').addEventListener('click', closeAddModal);
   document.getElementById('cancelAddModal').addEventListener('click', closeAddModal);
   document.getElementById('saveItemBtn').addEventListener('click', saveItem);
@@ -244,7 +231,7 @@ function switchSection(section) {
   });
 
   if (section === 'summary') {
-    renderSummaryTable(document.getElementById('summarySearch').value);
+    renderSummaryTable();
     loadMtoProgress();
   } else if (section === 'mto') {
     switchTab('input');
@@ -322,40 +309,13 @@ function renderMtoProgress(s) {
   box.innerHTML = linesCard + zonesCard;
 }
 
-/* ══════════════ MTO SUMMARY TABLE (line list) ══════════════ */
-function renderSummaryTable(query) {
-  const q = (query || '').toLowerCase();
-  const activeFilter = window.summaryFilter || 'all';
-  const filtered = allLines
-    .filter(l => `${l.lineNo} ${l.zone}`.toLowerCase().includes(q))
-    .filter(l => activeFilter === 'all' || l.status === activeFilter);
-
-  const tbody = document.getElementById('summaryTbody');
-  if (!filtered.length) {
-    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text-faint)">No lines found</td></tr>`;
-  } else {
-    tbody.innerHTML = filtered.map((l, i) => `
-      <tr class="summary-row ${inputCtrl && inputCtrl.activeLineId === l.id ? 'row-active' : ''}" data-line-id="${l.id}">
-        <td style="color:var(--text-faint);font-family:var(--font-mono);font-size:10px">${String(i + 1).padStart(2, '0')}</td>
-        <td class="td-tag" title="${escAttr(l.line ? '' : 'Line no longer in the line list / P&IDs')}">${escAttr(l.lineNo)}${l.line ? '' : ' ⚠'}</td>
-        <td style="color:var(--text-secondary);font-size:11px">${l.service}</td>
-        <td style="color:var(--text-secondary);font-size:11px">${l.zone}</td>
-        <td style="color:var(--text-secondary);font-size:11px">${l.pipingSpec || '—'}</td>
-        <td style="color:var(--text-secondary);font-size:11px">${l.sizeIn || '—'}</td>
-        <td>${STATUS_BADGE[l.status]}</td>
-        <td class="td-num">${l.items}</td>
-        <td class="td-num"><i class="ti ti-arrow-right summary-open-hint"></i></td>
-      </tr>
-    `).join('');
-    tbody.querySelectorAll('.summary-row').forEach(row => {
-      row.addEventListener('click', async () => {
-        switchSection('mto');
-        await inputCtrl.selectLine(Number(row.dataset.lineId));
-      });
-    });
-  }
+/* ══════════════ MTO SUMMARY badges ══════════════
+   The saved-zones list was removed from MTO Summary (user, 2026-10-25) — the
+   summary shows the progress panels only. Saved zones are still reached from
+   the MTO tab (Zone dropdown, << < > >>). */
+function renderSummaryTable() {
   document.getElementById('summaryCountBadge').textContent = allLines.length;
-  document.getElementById('summaryTotalBadge').textContent = filtered.length + ' lines';
+  document.getElementById('summaryTotalBadge').textContent = `${allLines.length} line zone${allLines.length === 1 ? '' : 's'} saved`;
 }
 
 /* ══════════════ MTO CONTROLLER FACTORY ══════════════
@@ -531,7 +491,7 @@ function createMtoController(cfg) {
       document.getElementById('selectedLineStat').innerHTML = state.zone
         ? `<i class="ti ti-point-filled" style="font-size:8px;color:var(--color-accent-strong)"></i> ${escAttr(state.lineData.lineNo)} · Zone ${escAttr(state.zone)}`
         : 'No line selected';
-      renderSummaryTable(document.getElementById('summarySearch').value);
+      renderSummaryTable();
     }
     refresh();
   }
@@ -875,7 +835,7 @@ function createMtoController(cfg) {
       byId('li_zone').value = keepZone;
       fillHeader();
       markSaved(true); refresh();
-      if (cfg.drivesShared) renderSummaryTable(document.getElementById('summarySearch').value);
+      if (cfg.drivesShared) renderSummaryTable();
       if (activeSection === 'summary') loadMtoProgress();
       if (cfg.onSaved) cfg.onSaved(full);
       showToast('success', `Saved · Rev ${state.lastRevision ? state.lastRevision.revNo : ''}`, `${state.rows.length} row(s) · ${d.lineNo} · Zone ${keepZone}`);
