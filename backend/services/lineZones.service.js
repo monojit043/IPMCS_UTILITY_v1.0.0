@@ -6,10 +6,9 @@ const lineData = require('./lineData.service');
 
 // COSMAS header: API name → column, max length
 const HEADER = {
-  contrCode: ['contr_code', 20], pipingClass: ['piping_class', 40], drgIndicator: ['drg_indicator', 1],
-  drgAreaNo: ['drg_area_no', 20], drgRevNo: ['drg_rev_no', 20], insType: ['ins_type', 20],
-  insExtent: ['ins_extent', 40], oprTemp1: ['opr_temp1', 30], oprTemp2: ['opr_temp2', 30],
-  desTemp1: ['des_temp1', 30], desTemp2: ['des_temp2', 30], batchNo: ['batch_no', 30],
+  contrCode: ['contr_code', 20], drgIndicator: ['drg_indicator', 1],
+  drgAreaNo: ['drg_area_no', 20], drgRevNo: ['drg_rev_no', 20],
+  insExtent: ['ins_extent', 40], batchNo: ['batch_no', 30],
   batchRevNo: ['batch_rev_no', 20], cleaningCode: ['cleaning_code', 20],
   insThirdParty: ['ins_third_party', 60], paintThirdParty: ['paint_third_party', 60],
 };

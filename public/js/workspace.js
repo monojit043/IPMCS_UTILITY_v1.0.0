@@ -308,10 +308,11 @@ function renderSummaryTable(query) {
    header and the BoM rows to mto_line_zones (+ manual_mto_data / model_dump_data).
    Each tab has its own selection; `p` is the element-id prefix ('' or 'dc_').
    Row edits, inserts and deletes stay local until Save (Undo works on them). */
+// COSMAS header fields the engineer types. Line data from the line list / P&ID
+// (piping class, insulation, P&T) is read-only — shown in the Line strip only.
 const COSMAS_KEYS = [
-  'contrCode', 'pipingClass', 'drgIndicator', 'drgAreaNo', 'drgRevNo',
-  'insType', 'insExtent', 'oprTemp1', 'oprTemp2', 'desTemp1', 'desTemp2',
-  'batchNo', 'batchRevNo', 'cleaningCode', 'insThirdParty', 'paintThirdParty',
+  'contrCode', 'drgIndicator', 'drgAreaNo', 'drgRevNo', 'cleaningCode', 'insExtent',
+  'insThirdParty', 'paintThirdParty', 'batchNo', 'batchRevNo',
 ];
 const ROW_FIELDS = ['pipingClass', 'inputCode', 'itemCode', 'dia1', 'dia2', 'qty'];
 const LINE_STATUS_TEXT = { pending: 'Pending', inprogress: 'In Progress', complete: 'Complete' };
@@ -327,7 +328,7 @@ async function loadAllLines() {
   return zones.map(z => ({
     ...z,
     lineNo: z.line ? z.line.lineNo : `${z.service}-${z.lsrNo}${z.sublineNo ? '-' + z.sublineNo : ''}`,
-    pipingSpec: z.pipingClass || (z.line && z.line.pipingSpec) || null,
+    pipingSpec: z.line ? z.line.pipingSpec : null,
     sizeIn: z.line ? z.line.sizeIn : null,
   }));
 }
@@ -497,39 +498,25 @@ function createMtoController(cfg) {
     }
   }
 
-  /* ── COSMAS line header ── */
-  // Values from the line list / P&ID, shown until the engineer types something else
-  function headerDefaults() {
-    const d = state.lineData || {};
-    return {
-      pipingClass: d.pipingSpec, insType: d.insulationType,
-      oprTemp1: d.opTemp, oprTemp2: d.opTemp2, desTemp1: d.designTemp, desTemp2: d.designTemp2,
-    };
-  }
-
+  /* ── COSMAS line header (engineer-entered fields only) ── */
   function fillHeader() {
     const has = !!state.lineData;
     const saved = state.zoneRec || {};
-    const defaults = headerDefaults();
     COSMAS_KEYS.forEach(k => {
       const input = byId('cos_' + k);
-      input.value = (has && (saved[k] ?? defaults[k])) || '';
+      input.value = (has && saved[k]) || '';
       input.disabled = !has;
-      input.classList.toggle('cos-overridden', !!saved[k] && defaults[k] != null && saved[k] !== defaults[k]);
-      input.title = defaults[k] ? `From line list / P&ID: ${defaults[k]}` : '';
     });
     const bolt = byId('cos_boltTensioning');
     bolt.checked = !!saved.boltTensioning; bolt.disabled = !has;
     renderHeaderStatus();
   }
 
-  // Only what differs from the line list / P&ID is stored
   function readHeader() {
-    const defaults = headerDefaults();
     const out = {};
     COSMAS_KEYS.forEach(k => {
       const v = byId('cos_' + k).value.trim();
-      if (v && v !== (defaults[k] || '')) out[k] = v;
+      if (v) out[k] = v;
     });
     out.boltTensioning = byId('cos_boltTensioning').checked;
     return out;
@@ -723,7 +710,7 @@ function createMtoController(cfg) {
   function insertRow(fields = {}, afterId = null) {
     if (!requireZone()) return;
     const row = {
-      id: tmpId--, pipingClass: byId('cos_pipingClass').value.trim() || state.lineData.pipingSpec || '',
+      id: tmpId--, pipingClass: state.lineData.pipingSpec || '',
       inputCode: '', itemCode: '', dia1: '', dia2: '', qty: 1, ...fields,
     };
     const idx = afterId == null ? state.rows.length : state.rows.findIndex(r => r.id === afterId) + 1;
@@ -868,6 +855,10 @@ function createMtoController(cfg) {
     const lines = [
       ['Line Key', byId('ld_lineKey').textContent], ['Line No', d.lineNo],
       ['Service', d.service], ['Unit', d.unitNo], ['LSR NO', d.lsrNo], ['Subline No.', d.sublineNo], ['Zone', state.zone],
+      ['Size', d.sizeIn], ['Piping Class', d.pipingSpec], ['INS Type', d.insulationType], ['INS Thickness', d.insulationThickness],
+      ['OPR Press', d.opPressure], ['OPR Temp 1', d.opTemp], ['OPR Temp 2', d.opTemp2],
+      ['Des Press', d.designPressure], ['Des Temp1', d.designTemp], ['Des Temp2', d.designTemp2],
+      ['Picked from', d.source], ['P&ID', d.pidNo],
       ...COSMAS_KEYS.map(k => [byId('cos_' + k).closest('.field').querySelector('.field-label').textContent, byId('cos_' + k).value]),
       ['Bolt Tensioning Required', byId('cos_boltTensioning').checked ? 'Yes' : 'No'],
       [],

@@ -62,8 +62,8 @@ CREATE TABLE IF NOT EXISTS ipmcs_user_assignments (
 -- One row per line + zone an engineer has saved MTO for. The line itself
 -- is identified the COSMAS way (Service / Unit / LSR NO / Subline No.);
 -- the zone is IPMCS's split of a line between engineers.
--- COSMAS header columns hold only what the engineer typed: NULL means "use
--- the value from the line list / P&ID" (piping class, INS type, temps).
+-- COSMAS header columns hold only what the engineer types. Line data
+-- (piping class, insulation, P&T) is never stored — it is read-only, live.
 CREATE TABLE IF NOT EXISTS mto_line_zones (
   id                 SERIAL PRIMARY KEY,
   job_no             VARCHAR(20)  NOT NULL,
@@ -73,16 +73,10 @@ CREATE TABLE IF NOT EXISTS mto_line_zones (
   subline_no         VARCHAR(10)  NOT NULL DEFAULT '',
   zone               VARCHAR(3)   NOT NULL,
   contr_code         VARCHAR(20),
-  piping_class       VARCHAR(40),
   drg_indicator      CHAR(1) CHECK (drg_indicator IN ('P','I','G','S')),
   drg_area_no        VARCHAR(20),
   drg_rev_no         VARCHAR(20),
-  ins_type           VARCHAR(20),
   ins_extent         VARCHAR(40),
-  opr_temp1          VARCHAR(30),
-  opr_temp2          VARCHAR(30),
-  des_temp1          VARCHAR(30),
-  des_temp2          VARCHAR(30),
   batch_no           VARCHAR(30),
   batch_rev_no       VARCHAR(20),
   cleaning_code      VARCHAR(20),
@@ -98,6 +92,11 @@ CREATE TABLE IF NOT EXISTS mto_line_zones (
   UNIQUE (job_no, unit_no, service, lsr_no, subline_no, zone)
 );
 CREATE INDEX IF NOT EXISTS idx_mto_line_zones_unit ON mto_line_zones (job_no, unit_no);
+-- 2026-10-25: piping class / INS type / OPR & Des temps were editable copies of
+-- line data — now read-only from the sources, so the columns are dropped.
+ALTER TABLE mto_line_zones DROP COLUMN IF EXISTS piping_class, DROP COLUMN IF EXISTS ins_type,
+  DROP COLUMN IF EXISTS opr_temp1, DROP COLUMN IF EXISTS opr_temp2,
+  DROP COLUMN IF EXISTS des_temp1, DROP COLUMN IF EXISTS des_temp2;
 
 -- One-time (2026-10-25): BoM tables renamed to what they hold, with their
 -- id sequences, indexes and constraint names —
