@@ -352,3 +352,17 @@ input.inline-input:focus { border-color: var(--color-accent); box-shadow: 0 0 0 
 .hist-detail h4 { font-family: var(--font-display); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); margin: 10px 0 4px; }
 .hist-kv { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px 14px; }
 .hist-kv div span { display: block; font-size: 9px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
+
+/* ── Line strip: the line data as picked (read-only, live) ── */
+.cos-line {
+  display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 3px 8px;
+  padding: 5px 8px; border: 1px dashed var(--color-border-strong); border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+.cos-line .ln-item { min-width: 0; }
+.cos-line .ln-key { display: block; font-size: 9px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+.cos-line .ln-val { display: block; font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cos-line .ln-span2 { grid-column: span 2; }
+.cos-line .ln-src { color: var(--color-accent-strong); }
+.cos-line .ln-diff { grid-column: 1 / -1; font-size: 11px; color: var(--color-warning); }
+.cos-line .ln-empty { grid-column: 1 / -1; font-size: 11px; color: var(--text-faint); }
