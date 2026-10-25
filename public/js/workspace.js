@@ -476,7 +476,7 @@ function createMtoController(cfg) {
     const label = (z) => {
       const parts = [];
       if (unitHasPlan) parts.push(z.planned ? 'planned' : 'not in plan');
-      parts.push(z.id ? `${z.items} rows · ${LINE_STATUS_TEXT[z.status]}` : 'not started');
+      parts.push(z.id ? `${z.items} row${z.items === 1 ? '' : 's'} · ${LINE_STATUS_TEXT[z.status]}` : 'not started');
       return `${z.zone}  (${parts.join(' · ')})`;
     };
     if (zones.length) {
