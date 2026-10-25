@@ -473,3 +473,28 @@ input.inline-input:focus { border-color: var(--color-accent); box-shadow: 0 0 0 
 .lines-table { max-height: 62vh; border: 1px solid var(--color-border); border-radius: var(--radius-md); }
 .lines-table td { white-space: nowrap; }
 .lines-table .chg { color: var(--color-warning); cursor: help; }
+
+/* ── Team ── */
+.team-body { padding: 10px 14px; overflow: auto; display: flex; flex-direction: column; gap: 12px; }
+.team-add { background: var(--color-surface-alt); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 10px 12px; }
+.team-add-title { font-family: var(--font-display); font-size: 9px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px; }
+.team-add-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.team-add-row select { width: auto; padding: 5px 9px; font-size: 12px; }
+.team-search { position: relative; }
+.team-search input { width: 320px; padding: 5px 9px; font-size: 12px; }
+.team-results { display: none; position: absolute; top: calc(100% + 3px); left: 0; right: 0; z-index: 60; max-height: 260px; overflow: auto;
+  background: var(--color-surface-alt); border: 1px solid var(--color-border-strong); border-radius: var(--radius-md); box-shadow: 0 8px 24px rgba(0,0,0,.25); }
+.team-result { padding: 6px 10px; font-size: 12px; cursor: pointer; }
+.team-result:hover { background: var(--color-accent-soft); }
+.team-result.muted { color: var(--text-faint); cursor: default; }
+.team-cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.team-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--color-border); font-size: 12px; }
+.team-row:last-child { border-bottom: 0; }
+.team-row select { width: auto; padding: 2px 6px; font-size: 11px; margin-left: auto; }
+.team-name { color: var(--text-primary); }
+.team-id { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+.team-tag { font-size: 9px; padding: 1px 6px; border-radius: 8px; background: var(--color-accent-soft); color: var(--color-accent-strong); margin-left: auto; }
+.team-meta { font-size: 10px; color: var(--text-faint); margin-left: auto; }
+.team-row select + .tool-btn, .team-row .team-meta + .tool-btn { margin-left: 0; }
+.team-log-row { font-size: 11px; color: var(--text-secondary); padding: 3px 0; }
+.team-log-row .team-meta { margin-right: 8px; }

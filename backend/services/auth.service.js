@@ -27,37 +27,57 @@ async function getActiveEmployee(empId) {
   return rows[0] || null;
 }
 
-// ADMIN/JE is IPMCS-specific: IPMCS's own list (ipmcs_user_assignments).
-// Anyone without a row there is a plain JE.
-async function getIpmcsRole(empId) {
-  const { rows } = await query(`SELECT role FROM ipmcs_user_assignments WHERE upper(emp_id) = upper($1)`, [empId]);
-  return rows[0] ? rows[0].role : 'JE';
-}
+// ── Who may work where, and as what (per job + unit) ──
+//   LEAD — GL of the job + unit, or SGL of the job (all its units), live from PC-2
+//   ML   — Material Lead, appointed in IPMCS (ipmcs_user_assignments)
+//   JE   — Job Engineer, added in IPMCS
+// Only these people can open a job + unit in IPMCS.
+const ROLE_RANK = { LEAD: 3, ML: 2, JE: 1 };
 
-// A user can be assigned to several job_no + unit_no combinations in PIMS
-// (one row per PIMS role, e.g. Modeller/Checker/GL, for the same project+unit
-// — we only care about the distinct project+unit pairs here). Live from PC-2
-// via ePULSE's user_role_assignments / projects views.
-async function getAssignments(empId) {
+// Leads of PC-2: [{ jobNo, unitNo, empId, via: 'GL' | 'SGL' }]
+async function pimsLeads({ empId, jobNo, unitNo } = {}) {
   const { rows } = await queryEpulse(
-    `SELECT DISTINCT ura.project_id AS "jobNo", ura.unit_no AS "unitNo", p.name AS "jobName"
-     FROM user_role_assignments ura
-     LEFT JOIN projects p ON p.id = ura.project_id
-     WHERE upper(ura.user_id) = upper($1)
-     ORDER BY 1, 2`,
-    [empId]
+    `SELECT project_id AS "jobNo", unit_no AS "unitNo", user_id AS "empId", 'GL' AS via
+     FROM user_role_assignments
+     WHERE role = 'GL' AND ($1::text IS NULL OR upper(user_id) = upper($1))
+       AND ($2::text IS NULL OR project_id = $2) AND ($3::text IS NULL OR unit_no = $3)
+     UNION
+     SELECT pu.project_id, pu.unit_no, s.user_id, 'SGL'
+     FROM (SELECT project_id, user_id FROM user_role_assignments WHERE role = 'SGL'
+           UNION SELECT project_id, user_id FROM project_sgls) s
+     JOIN project_units pu ON pu.project_id = s.project_id
+     WHERE ($1::text IS NULL OR upper(s.user_id) = upper($1))
+       AND ($2::text IS NULL OR pu.project_id = $2) AND ($3::text IS NULL OR pu.unit_no = $3)`,
+    [empId || null, jobNo || null, unitNo || null]
   );
   return rows;
 }
 
-// Units the user is assigned to on one job (for the Unit dropdown)
+// Every job + unit the employee may open, with the role there
+async function getAccess(empId) {
+  const [leads, { rows: team }, { rows: jobs }] = await Promise.all([
+    pimsLeads({ empId }),
+    query(`SELECT job_no AS "jobNo", unit_no AS "unitNo", role FROM ipmcs_user_assignments WHERE upper(emp_id) = upper($1)`, [empId]),
+    queryEpulse(`SELECT id, name FROM projects`),
+  ]);
+  const jobName = new Map(jobs.map((j) => [j.id, j.name]));
+  const byKey = new Map();
+  const put = (jobNo, unitNo, role, via) => {
+    const k = `${jobNo}|${unitNo}`;
+    const cur = byKey.get(k);
+    if (!cur || ROLE_RANK[role] > ROLE_RANK[cur.role]) byKey.set(k, { jobNo, unitNo, jobName: jobName.get(jobNo) || null, role, via });
+  };
+  leads.forEach((l) => put(l.jobNo, l.unitNo, 'LEAD', l.via));
+  team.forEach((t) => put(t.jobNo, t.unitNo, t.role, 'IPMCS'));
+  return [...byKey.values()].sort((a, b) => a.jobNo.localeCompare(b.jobNo) || a.unitNo.localeCompare(b.unitNo));
+}
+
+// Login: the job + units the employee can open (role included)
+const getAssignments = getAccess;
+
+// Units the employee can open on one job, with the role in each (Unit dropdown)
 async function getUnitsForJob(empId, jobNo) {
-  const { rows } = await queryEpulse(
-    `SELECT DISTINCT unit_no FROM user_role_assignments
-     WHERE upper(user_id) = upper($1) AND project_id = $2 ORDER BY 1`,
-    [empId, jobNo]
-  );
-  return rows.map((r) => r.unit_no);
+  return (await getAccess(empId)).filter((a) => a.jobNo === jobNo).map((a) => ({ unitNo: a.unitNo, role: a.role }));
 }
 
 // Login only asks for the JOB — the unit is picked in the page afterwards.
@@ -105,7 +125,9 @@ function verifyPreAuthToken(token) {
 module.exports = {
   verifyCredentials,
   getActiveEmployee,
-  getIpmcsRole,
+  pimsLeads,
+  getAccess,
+  ROLE_RANK,
   getAssignments,
   getUnitsForJob,
   jobsFrom,

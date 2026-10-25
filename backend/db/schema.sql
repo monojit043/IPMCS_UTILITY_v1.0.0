@@ -48,16 +48,53 @@ BEGIN
   END IF;
 END $$;
 
--- IPMCS's own Admin list (ADMIN may create P&ID folders and pick drawings
--- into them) — not taken from PC-2 roles. Anyone without a row is a JE.
+-- IPMCS team per job + unit: Material Leads (ML) and Job Engineers (JE).
+-- Leads (GL / SGL) come live from PC-2 and are never stored here.
 CREATE TABLE IF NOT EXISTS ipmcs_user_assignments (
   id          SERIAL PRIMARY KEY,
-  emp_id      VARCHAR(50) UNIQUE NOT NULL,
-  role        VARCHAR(10) NOT NULL CHECK (role IN ('ADMIN','JE')),
+  emp_id      VARCHAR(50) NOT NULL,
+  job_no      VARCHAR(20) NOT NULL,
+  unit_no     VARCHAR(10) NOT NULL,
+  role        VARCHAR(10) NOT NULL CHECK (role IN ('ML','JE')),
   assigned_by VARCHAR(50),
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (emp_id, job_no, unit_no)
 );
+
+-- One-time (2026-10-26): from a global ADMIN / JE list to roles per job + unit.
+-- The team of a job + unit is:
+--   Lead — GL of the job + unit or SGL of the job on PC-2 (live, never stored)
+--   ML   — Material Lead, appointed in IPMCS by a Lead
+--   JE   — Job Engineer, added in IPMCS by a Lead or an ML
+-- The old global ADMIN row is dropped (its rights now belong to Leads / MLs).
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_name = 'ipmcs_user_assignments' AND column_name = 'job_no') THEN
+    DELETE FROM ipmcs_user_assignments;
+    ALTER TABLE ipmcs_user_assignments DROP CONSTRAINT IF EXISTS ipmcs_user_assignments_emp_id_key;
+    ALTER TABLE ipmcs_user_assignments DROP CONSTRAINT IF EXISTS ipmcs_user_assignments_role_check;
+    ALTER TABLE ipmcs_user_assignments ADD COLUMN job_no VARCHAR(20) NOT NULL;
+    ALTER TABLE ipmcs_user_assignments ADD COLUMN unit_no VARCHAR(10) NOT NULL;
+    ALTER TABLE ipmcs_user_assignments ADD CONSTRAINT ipmcs_user_assignments_role_check CHECK (role IN ('ML','JE'));
+    ALTER TABLE ipmcs_user_assignments ADD CONSTRAINT ipmcs_user_assignments_emp_job_unit_key UNIQUE (emp_id, job_no, unit_no);
+  END IF;
+END $$;
+
+-- Every team change (who added / changed / removed whom, when)
+CREATE TABLE IF NOT EXISTS ipmcs_assignment_log (
+  id          SERIAL PRIMARY KEY,
+  job_no      VARCHAR(20) NOT NULL,
+  unit_no     VARCHAR(10) NOT NULL,
+  emp_id      VARCHAR(50) NOT NULL,
+  action      VARCHAR(10) NOT NULL CHECK (action IN ('add','change','remove')),
+  old_role    VARCHAR(10),
+  new_role    VARCHAR(10),
+  done_by     VARCHAR(50) NOT NULL,
+  done_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_ipmcs_assignment_log_unit ON ipmcs_assignment_log (job_no, unit_no, done_at);
 
 -- One row per line + zone an engineer has saved MTO for. The line itself
 -- is identified the COSMAS way (Service / Unit / LSR NO / Subline No.);

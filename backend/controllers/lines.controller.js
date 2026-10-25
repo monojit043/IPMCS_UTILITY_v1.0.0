@@ -99,7 +99,7 @@ async function deleteZone(req, res) {
   const zone = await ownZone(req);
   const me = String(req.user.empId).toUpperCase();
   const mine = [zone.createdBy, zone.updatedBy].some((e) => String(e || '').toUpperCase() === me);
-  if (!mine && req.user.role !== 'ADMIN') throw new HttpError(403, 'Only the engineer who saved this line + zone, or an Admin, can delete it');
+  if (!mine && !['LEAD', 'ML'].includes(req.user.role)) throw new HttpError(403, 'Only the engineer who saved this line + zone, or the Material Lead / GL of the unit, can delete it');
   const out = await lineZones.deleteZone(zone.id, req.user.empId, (req.body && req.body.reason) || null);
   if (!out) throw new HttpError(404, 'Line zone not found');
   res.json({ ok: true, ...out });

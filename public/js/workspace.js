@@ -27,7 +27,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   const initials = user.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
   document.getElementById('avatarEl').textContent = initials;
   document.getElementById('userNameEl').textContent = user.name;
-  document.getElementById('roleStatEl').textContent = 'Role: ' + user.role;
+  showRole();
 
   showJobUnitLabel();
 
@@ -84,16 +84,26 @@ function showJobUnitLabel() {
   document.getElementById('jobUnitStatEl').textContent = label;
 }
 
+// Role in the current unit: LEAD (GL / SGL on PC-2), ML (Material Lead) or JE
+const ROLE_LABEL = { LEAD: 'Lead (GL / SGL)', ML: 'Material Lead', JE: 'Job Engineer' };
+const canManage = () => ['LEAD', 'ML'].includes(currentUser && currentUser.role);
+let unitRoles = new Map();
+function showRole() {
+  document.getElementById('roleStatEl').textContent = 'Role: ' + (ROLE_LABEL[currentUser.role] || currentUser.role || '—');
+}
+
 async function populateUnits() {
   let units = [];
   try { units = await DataStore.getUnits(); } catch (err) { /* fall back to the session unit */ }
+  unitRoles = new Map(units.map(u => [u.unitNo, u.role]));
   let current = DataStore.getUnit();
-  if (units.length && !units.includes(current)) {   // assignment removed on PC-2 since login
-    current = units[0];
+  if (units.length && !unitRoles.has(current)) {   // removed from this unit's team since login
+    current = units[0].unitNo;
     DataStore.setUnit(current);
     showJobUnitLabel();
   }
-  const list = units.length ? units : [current].filter(Boolean);
+  if (unitRoles.has(current)) { currentUser.role = unitRoles.get(current); showRole(); }
+  const list = units.length ? units.map(u => u.unitNo) : [current].filter(Boolean);
   UNIT_SELECTS.forEach(id => {
     const sel = document.getElementById(id);
     sel.innerHTML = list.map(u => `<option value="${escAttr(u)}">${escAttr(u)}</option>`).join('') || '<option value="">—</option>';
@@ -115,6 +125,8 @@ async function switchUnit(unitNo) {
   DataStore.setUnit(unitNo);
   UNIT_SELECTS.forEach(id => { document.getElementById(id).value = unitNo; });
   showJobUnitLabel();
+  if (unitRoles.has(unitNo)) { currentUser.role = unitRoles.get(unitNo); showRole(); }
+  if (activeSection === 'team') loadTeam();
   try {
     allLines = await loadAllLines();
     await Promise.all([inputCtrl.resetForUnit(), dumpCtrl.resetForUnit()]);
@@ -218,7 +230,7 @@ function bindGlobalEvents() {
 /* ══════════════ SECTION NAV ══════════════ */
 const SECTION_VIEWS = {
   summary: 'summaryView', mto: 'mtoView',
-  'upload-ipmcs': 'uploadIpmcsView', 'upload-model': 'uploadModelView', reports: 'reportsView',
+  'upload-ipmcs': 'uploadIpmcsView', 'upload-model': 'uploadModelView', reports: 'reportsView', team: 'teamView',
 };
 
 function switchSection(section) {
@@ -235,6 +247,8 @@ function switchSection(section) {
     loadMtoProgress();
   } else if (section === 'mto') {
     switchTab('input');
+  } else if (section === 'team') {
+    loadTeam();
   } else if (section === 'reports') {
     document.getElementById('reportsScope').textContent =
       `${currentUser.jobNo || ''} · Unit ${DataStore.getUnit() || '—'}`;
@@ -343,6 +357,119 @@ async function downloadReport(type, btn) {
 document.querySelectorAll('[data-report]').forEach(btn =>
   btn.addEventListener('click', () => downloadReport(btn.dataset.report, btn)));
 
+/* ══════════════ TEAM: Leads (PC-2), Material Leads and JEs of the job + unit ══════════════ */
+let teamData = null, teamPick = null, teamSearchTimer = null;
+
+async function loadTeam() {
+  document.getElementById('teamTitle').textContent = `Team — ${currentUser.jobNo || ''} · Unit ${DataStore.getUnit() || '—'}`;
+  try {
+    teamData = await DataStore.getTeam();
+  } catch (err) {
+    document.getElementById('teamLeads').innerHTML = `<div class="mp-note" style="color:var(--color-danger)">${escAttr(err.message)}</div>`;
+    return;
+  }
+  currentUser.role = teamData.myRole; showRole();
+  document.getElementById('teamMyRole').textContent = 'You: ' + (ROLE_LABEL[teamData.myRole] || teamData.myRole);
+  document.getElementById('teamAdd').style.display = teamData.canAssign.JE ? '' : 'none';
+  document.querySelector('#teamRole option[value="ML"]').disabled = !teamData.canAssign.ML;
+  if (!teamData.canAssign.ML) document.getElementById('teamRole').value = 'JE';
+  renderTeam();
+}
+
+function renderTeam() {
+  const t = teamData, me = String(currentUser.empId || '').toUpperCase();
+  const who = (m) => `<span class="team-name">${escAttr(m.name || m.empId)}</span> <span class="team-id">${escAttr(m.empId)}</span>`;
+  document.getElementById('teamLeads').innerHTML = t.leads.map(l =>
+    `<div class="team-row">${who(l)}<span class="team-tag">${escAttr(l.via)}</span></div>`).join('') ||
+    '<div class="mp-note">No GL / SGL for this unit on PC-2</div>';
+  const memberRow = (m) => {
+    const isMe = String(m.empId).toUpperCase() === me;
+    const canChange = !isMe && (t.myRole === 'LEAD' || (t.myRole === 'ML' && m.role === 'JE'));
+    const roleSel = canChange && t.myRole === 'LEAD'
+      ? `<select data-team-role="${escAttr(m.empId)}"><option value="JE"${m.role === 'JE' ? ' selected' : ''}>JE</option><option value="ML"${m.role === 'ML' ? ' selected' : ''}>ML</option></select>` : '';
+    return `<div class="team-row">${who(m)}
+      <span class="team-meta" title="Added / changed by ${escAttr(m.assignedByName || m.assignedBy || '')}">${new Date(m.assignedAt).toLocaleDateString()}</span>
+      ${roleSel}${canChange ? `<div class="tool-btn" data-team-remove="${escAttr(m.empId)}" title="Remove from the team" style="color:var(--color-danger)"><i class="ti ti-user-minus"></i></div>` : ''}</div>`;
+  };
+  document.getElementById('teamMl').innerHTML = t.members.filter(m => m.role === 'ML').map(memberRow).join('') || '<div class="mp-note">No Material Lead yet</div>';
+  document.getElementById('teamJe').innerHTML = t.members.filter(m => m.role === 'JE').map(memberRow).join('') || '<div class="mp-note">No Job Engineers yet</div>';
+  const ACTION = { add: 'added as', change: 'changed to', remove: 'removed from' };
+  document.getElementById('teamLog').innerHTML = t.log.map(l => `<div class="team-log-row">
+      <span class="team-meta">${new Date(l.doneAt).toLocaleString()}</span>
+      <b>${escAttr(l.doneByName || l.doneBy)}</b> ${l.action === 'remove' ? 'removed' : 'set'} ${escAttr(l.name || l.empId)}
+      ${l.action === 'remove' ? `(was ${escAttr(l.oldRole)})` : `${ACTION[l.action]} ${escAttr(l.newRole)}${l.oldRole ? ` (was ${escAttr(l.oldRole)})` : ''}`}</div>`).join('') ||
+    '<div class="mp-note">No changes yet</div>';
+}
+
+async function teamAssign(empId, role) {
+  try {
+    const r = await DataStore.assignTeamMember(empId, role);
+    showToast('success', 'Team updated', r.changed ? `${r.name || empId} is now ${ROLE_LABEL[r.role]}` : 'No change');
+    await loadTeam();
+  } catch (err) {
+    showToast('error', 'Could not update the team', err.message);
+    renderTeam();
+  }
+}
+
+document.getElementById('teamSearch').addEventListener('input', (e) => {
+  teamPick = null;
+  document.getElementById('teamAddBtn').disabled = true;
+  document.getElementById('teamPicked').textContent = '';
+  clearTimeout(teamSearchTimer);
+  const q = e.target.value.trim(), box = document.getElementById('teamResults');
+  if (q.length < 2) { box.innerHTML = ''; box.style.display = 'none'; return; }
+  teamSearchTimer = setTimeout(async () => {
+    try {
+      const list = await DataStore.searchEmployees(q);
+      const inTeam = new Map((teamData ? teamData.members : []).map(m => [String(m.empId).toUpperCase(), m.role]));
+      const leads = new Set((teamData ? teamData.leads : []).map(l => String(l.empId).toUpperCase()));
+      box.innerHTML = list.map(p => {
+        const k = String(p.empId).toUpperCase();
+        const note = leads.has(k) ? 'Lead' : inTeam.has(k) ? inTeam.get(k) : '';
+        return `<div class="team-result" data-pick="${escAttr(p.empId)}" data-name="${escAttr(p.name)}">${escAttr(p.name)} <span class="team-id">${escAttr(p.empId)}${p.department ? ' · ' + escAttr(p.department) : ''}</span>${note ? ` <span class="team-tag">${note}</span>` : ''}</div>`;
+      }).join('') || '<div class="team-result muted">No active employee found</div>';
+      box.style.display = 'block';
+    } catch (err) {
+      box.innerHTML = `<div class="team-result muted">${escAttr(err.message)}</div>`;
+      box.style.display = 'block';
+    }
+  }, 250);
+});
+document.getElementById('teamResults').addEventListener('click', (e) => {
+  const r = e.target.closest('[data-pick]');
+  if (!r) return;
+  teamPick = r.dataset.pick;
+  document.getElementById('teamSearch').value = `${r.dataset.name} (${teamPick})`;
+  document.getElementById('teamPicked').textContent = '';
+  document.getElementById('teamResults').style.display = 'none';
+  document.getElementById('teamAddBtn').disabled = false;
+});
+document.getElementById('teamAddBtn').addEventListener('click', async () => {
+  if (!teamPick) return;
+  await teamAssign(teamPick, document.getElementById('teamRole').value);
+  teamPick = null;
+  document.getElementById('teamSearch').value = '';
+  document.getElementById('teamAddBtn').disabled = true;
+});
+document.getElementById('teamView').addEventListener('change', (e) => {
+  const sel = e.target.closest('[data-team-role]');
+  if (sel) teamAssign(sel.dataset.teamRole, sel.value);
+});
+document.getElementById('teamView').addEventListener('click', async (e) => {
+  const rm = e.target.closest('[data-team-remove]');
+  if (!rm) return;
+  const m = teamData.members.find(x => x.empId === rm.dataset.teamRemove);
+  if (!confirm(`Remove ${m ? m.name : rm.dataset.teamRemove} (${m ? m.role : ''}) from the IPMCS team of this unit?\n\nThey will no longer be able to open this unit in IPMCS. Their saved MTO stays.`)) return;
+  try {
+    await DataStore.removeTeamMember(rm.dataset.teamRemove);
+    showToast('success', 'Removed from the team', m ? m.name : rm.dataset.teamRemove);
+    await loadTeam();
+  } catch (err) {
+    showToast('error', 'Could not remove', err.message);
+  }
+});
+
 /* ══════════════ LINES window: search / delete / print line + zones with MTO taken ══════════════ */
 const LINE_STATUS_LABEL = { pending: 'Pending', inprogress: 'In Progress', complete: 'Complete' };
 let linesAll = [], linesCtrl = null;
@@ -388,7 +515,7 @@ function renderLines() {
   document.getElementById('lfCount').textContent = `${list.length} of ${linesAll.length}`;
   const me = String(currentUser.empId || '').toUpperCase();
   document.getElementById('linesTbody').innerHTML = list.map(l => {
-    const canDelete = currentUser.role === 'ADMIN' || [l.createdBy, l.savedBy].some(e => String(e || '').toUpperCase() === me);
+    const canDelete = canManage() || [l.createdBy, l.savedBy].some(e => String(e || '').toUpperCase() === me);
     return `<tr>
       <td class="td-tag">${escAttr(l.lineNo || '— (not in sources)')}</td><td>${escAttr(l.service)}</td><td>${escAttr(l.lsrNo)}</td>
       <td>${escAttr(l.sublineNo || '—')}</td><td>${escAttr(l.zone)}</td><td class="td-tag">${escAttr(l.lineKey)}</td>
@@ -1310,7 +1437,7 @@ function pidView(name) {
 
 async function showPidFolders() {
   pidView('pidFoldersView');
-  const isAdmin = currentUser && currentUser.role === 'ADMIN';
+  const isAdmin = canManage();   // Lead or Material Lead of the unit
   document.getElementById('pidNewFolderBtn').style.display = isAdmin ? 'inline-flex' : 'none';
 
   try {
@@ -1344,7 +1471,7 @@ async function showPidFolders() {
 async function openPidFolder(folder) {
   pidActiveFolder = folder;
   pidView('pidDocumentsView');
-  const isAdmin = currentUser && currentUser.role === 'ADMIN';
+  const isAdmin = canManage();   // Lead or Material Lead of the unit
   document.getElementById('pidSelectBtn').style.display = isAdmin ? 'inline-flex' : 'none';
   document.getElementById('pidFolderTitle').textContent = folder.name;
 

@@ -1,11 +1,12 @@
 const authService = require('../services/auth.service');
 
-// The unit being worked in can be switched without logging in again: the
-// page sends it as an X-Unit-No header. It must be one of the user's units
-// for the session's job, read live from PC-2 (short cache, so a few seconds
-// after PIMS changes an assignment it takes effect here).
+// Every API call works in one job + unit: the session's job and the unit the
+// page sends as X-Unit-No (or the session's starting unit). The employee must
+// be on that unit's team — Lead (GL / SGL on PC-2), Material Lead or JE in
+// IPMCS — and req.user.role becomes their role THERE (LEAD / ML / JE).
+// Short cache, cleared whenever a team changes.
 const CACHE_MS = 60 * 1000;
-const cache = new Map();   // "empId|jobNo" → { at, units }
+const cache = new Map();   // "EMPID|jobNo" → { at, units: [{ unitNo, role }] }
 
 async function unitsFor(empId, jobNo) {
   const key = `${String(empId).toUpperCase()}|${jobNo}`;
@@ -16,19 +17,22 @@ async function unitsFor(empId, jobNo) {
   return units;
 }
 
+function clearAccessCache() {
+  cache.clear();
+}
+
 async function applyUnit(req, res, next) {
   try {
-    const wanted = String(req.get('X-Unit-No') || '').trim();
-    if (!wanted || wanted === req.user.unitNo) return next();
-    const units = await unitsFor(req.user.empId, req.user.jobNo);
-    if (!units.includes(wanted)) {
-      return res.status(403).json({ error: `You are not assigned to unit ${wanted} on job ${req.user.jobNo}` });
+    const unitNo = String(req.get('X-Unit-No') || req.user.unitNo || '').trim();
+    const here = (await unitsFor(req.user.empId, req.user.jobNo)).find((u) => u.unitNo === unitNo);
+    if (!here) {
+      return res.status(403).json({ error: `You are not on the IPMCS team of job ${req.user.jobNo} unit ${unitNo || '—'} — ask its Material Lead or GL` });
     }
-    req.user = { ...req.user, unitNo: wanted };
+    req.user = { ...req.user, unitNo, role: here.role };
     next();
   } catch (err) {
     next(err);
   }
 }
 
-module.exports = { applyUnit, unitsFor };
+module.exports = { applyUnit, unitsFor, clearAccessCache };

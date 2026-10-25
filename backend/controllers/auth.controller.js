@@ -43,25 +43,28 @@ function logout(req, res) {
 }
 
 async function startSession(employee, res) {
-  const role = await authService.getIpmcsRole(employee.empId);
-  // Only the job is chosen at login; the unit is switched in the page
+  // Only the job + units the employee is on the IPMCS team of (Lead from PC-2,
+  // or ML / JE in IPMCS). Only the job is chosen at login; the unit in the page.
   const assignments = authService.jobsFrom(await authService.getAssignments(employee.empId));
+  if (!assignments.length) {
+    throw new HttpError(403, 'You are not on the IPMCS team of any job + unit yet — ask the Material Lead or GL of your unit to add you');
+  }
 
   if (assignments.length > 1) {
     const preAuthToken = authService.generatePreAuthToken({
       empId: employee.empId,
       name: employee.name,
-      role,
+      role: null,
       assignments,
     });
     return res.json({ needsSelection: true, preAuthToken, name: employee.name, assignments });
   }
 
-  const chosen = assignments[0] || {};
+  const chosen = assignments[0];
   const result = await finalizeLogin({
     empId: employee.empId,
     name: employee.name,
-    role,
+    role: chosen.role,
     jobNo: chosen.jobNo,
     unitNo: chosen.unitNo,
     jobName: chosen.jobName,
@@ -86,7 +89,7 @@ async function selectAssignment(req, res) {
   const result = await finalizeLogin({
     empId: payload.empId,
     name: payload.name,
-    role: payload.role,
+    role: match.role,
     jobNo: match.jobNo,
     unitNo: match.unitNo,
     jobName: match.jobName,

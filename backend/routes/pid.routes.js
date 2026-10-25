@@ -8,13 +8,13 @@ const highlightsController = require('../controllers/pidHighlights.controller');
 const router = express.Router();
 
 router.get('/folders', asyncHandler(foldersController.list));
-router.post('/folders', requireRole('ADMIN'), asyncHandler(foldersController.create));
+router.post('/folders', requireRole('LEAD', 'ML'), asyncHandler(foldersController.create));
 
 router.get('/folders/:folderId/documents', asyncHandler(foldersController.listDocuments));
-router.post('/folders/:folderId/selections', requireRole('ADMIN'), asyncHandler(foldersController.addSelection));
+router.post('/folders/:folderId/selections', requireRole('LEAD', 'ML'), asyncHandler(foldersController.addSelection));
 router.delete(
   '/folders/:folderId/selections/:masterIndexId',
-  requireRole('ADMIN'),
+  requireRole('LEAD', 'ML'),
   asyncHandler(foldersController.removeSelection)
 );
 

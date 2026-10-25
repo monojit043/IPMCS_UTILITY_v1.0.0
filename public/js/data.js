@@ -219,6 +219,19 @@ const DataStore = (() => {
   function saveLineZone(payload) {
     return apiFetch('/line-zones', { method: 'PUT', body: JSON.stringify(payload) });
   }
+  // Team of the current job + unit (Leads from PC-2, Material Leads, JEs)
+  function getTeam() {
+    return apiFetch('/team');
+  }
+  function searchEmployees(q) {
+    return apiFetch('/team/employees' + qs({ q }));
+  }
+  function assignTeamMember(empId, role) {
+    return apiFetch('/team', { method: 'PUT', body: JSON.stringify({ empId, role }) });
+  }
+  function removeTeamMember(empId) {
+    return apiFetch(`/team/${encodeURIComponent(empId)}`, { method: 'DELETE' });
+  }
   // Search/Delete Lines/Print: every line + zone with MTO taken in the unit
   function searchLineZones() {
     return apiFetch('/line-zones/search');
@@ -299,7 +312,7 @@ const DataStore = (() => {
   return {
     login, ssoLogin, logout, selectAssignment, getSession, clearSession, getUnits, getUnit, setUnit, getPendingAssignment, clearPendingAssignment,
     getServices, getLsrNos, getSublines, getLineData, getZones,
-    getLineZones, getLineZone, saveLineZone, getMtoSummary, searchLineZones, deleteLineZone, getZoneRevisions, getZoneRevision,
+    getLineZones, getLineZone, saveLineZone, getMtoSummary, searchLineZones, deleteLineZone, getTeam, searchEmployees, assignTeamMember, removeTeamMember, getZoneRevisions, getZoneRevision,
     getPidFolders, createPidFolder, getPidDocuments,
     getAvailablePimsDocuments, addPidFolderSelection, removePidFolderSelection,
     getPidDocument, getPidDocumentForLine, pidFileUrl, authHeaders,
