@@ -366,3 +366,12 @@ input.inline-input:focus { border-color: var(--color-accent); box-shadow: 0 0 0 
 .cos-line .ln-src { color: var(--color-accent-strong); }
 .cos-line .ln-diff { grid-column: 1 / -1; font-size: 11px; color: var(--color-warning); }
 .cos-line .ln-empty { grid-column: 1 / -1; font-size: 11px; color: var(--text-faint); }
+
+/* ── Line data boxes: same boxes as the COSMAS fields, read-only (from the backend) ── */
+.cos-span4 { grid-column: span 4; }
+.cos-fields .cos-ro input,
+.cos-fields .cos-ro input:focus {
+  background: var(--color-bg); border-style: dashed; color: var(--text-secondary);
+  box-shadow: none; cursor: default; opacity: 1;
+}
+.cos-diffnote { font-size: 11px; color: var(--color-warning); }

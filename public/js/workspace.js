@@ -541,22 +541,19 @@ function createMtoController(cfg) {
     'line_list+pid': 'Line list (also on P&ID — line list used)',
     'pid+parent_line': 'P&ID sub-line (P&T from line list parent)',
   };
+  const LINE_BOXES = ['lineNo', 'sizeIn', 'pipingSpec', 'insulationType', 'insulationThickness',
+    'opPressure', 'opTemp', 'opTemp2', 'designPressure', 'designTemp', 'designTemp2', 'source', 'pidNo'];
   function renderLineStrip() {
-    const box = byId('ld_line');
     const d = state.lineData;
-    if (!d) {
-      box.innerHTML = '<div class="ln-empty">Line — choose Service, LSR NO and Subline No. to see the line data</div>';
-      return;
-    }
-    const item = (key, val, cls = '') => `<div class="ln-item ${cls}"><span class="ln-key">${key}</span><span class="ln-val" title="${escAttr(val ?? '')}">${escAttr(val ?? '—')}</span></div>`;
-    box.innerHTML =
-      item('Line No', d.lineNo, 'ln-span2') + item('Size', d.sizeIn) + item('Piping Class', d.pipingSpec) +
-      item('INS Type / Thk', [d.insulationType, d.insulationThickness].filter(Boolean).join(' / ') || null) +
-      `<div class="ln-item"><span class="ln-key">Picked from</span><span class="ln-val ln-src" title="${escAttr(PICKED_FROM[d.source] || d.source)}">${escAttr(PICKED_FROM[d.source] || d.source)}</span></div>` +
-      item('OPR Press', d.opPressure) + item('OPR Temp', [d.opTemp, d.opTemp2].filter(Boolean).join(' / ') || null) +
-      item('Des Press', d.designPressure) + item('Des Temp', [d.designTemp, d.designTemp2].filter(Boolean).join(' / ') || null) +
-      item('P&ID', d.pidNo, 'ln-span2') +
-      (d.dataMismatch ? `<div class="ln-diff">⚠ Line list and P&ID differ — line list used: ${escAttr(d.dataMismatch)}</div>` : '');
+    LINE_BOXES.forEach(k => {
+      const v = !d ? '' : k === 'source' ? (PICKED_FROM[d.source] || d.source) : (d[k] ?? '');
+      const input = byId('ro_' + k);
+      input.value = v;
+      if (k === 'source' || k === 'pidNo' || k === 'lineNo') input.title = v || 'From the line list / P&ID — read-only';
+    });
+    const note = byId('ld_line');
+    note.textContent = d && d.dataMismatch ? `⚠ Line list and P&ID differ — line list used: ${d.dataMismatch}` : '';
+    note.style.display = d && d.dataMismatch ? 'block' : 'none';
   }
 
   function renderHeaderStatus() {
