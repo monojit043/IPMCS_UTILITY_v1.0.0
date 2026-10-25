@@ -127,6 +127,7 @@ async function switchUnit(unitNo) {
   showJobUnitLabel();
   if (unitRoles.has(unitNo)) { currentUser.role = unitRoles.get(unitNo); showRole(); }
   if (activeSection === 'team') loadTeam();
+  if (activeSection === 'mto' && activeTab === 'pid') showPidFolders();   // folders are per job + unit
   try {
     allLines = await loadAllLines();
     await Promise.all([inputCtrl.resetForUnit(), dumpCtrl.resetForUnit()]);

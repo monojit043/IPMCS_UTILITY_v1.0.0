@@ -289,16 +289,31 @@ CREATE INDEX IF NOT EXISTS idx_manual_mto_data_zone ON manual_mto_data (line_zon
 CREATE INDEX IF NOT EXISTS idx_model_dump_data_zone ON model_dump_data (line_zone_id);
 CREATE INDEX IF NOT EXISTS idx_sppid_extracted_data_zone ON sppid_extracted_data (line_zone_id);
 
--- P&ID library: ADMIN-curated folders (e.g. "MTO-1") that reference sheets
--- of ePULSE's P&ID module (pid_master_index ids) — ePULSE is the source of
--- truth for P&IDs; IPMCS only records which sheets an admin selected for MTO
--- work and every user's highlight progress on them.
+-- P&ID library: folders (e.g. "MTO-1") of ONE job + unit, made by its Lead /
+-- Material Lead, referencing sheets of ePULSE's P&ID module (pid_master_index
+-- ids) of that job + unit — ePULSE is the source of truth for P&IDs; IPMCS only
+-- records which sheets were selected for MTO work and the highlight progress.
 CREATE TABLE IF NOT EXISTS pid_folders (
   id          SERIAL PRIMARY KEY,
-  name        VARCHAR(100) NOT NULL UNIQUE,
+  job_no      VARCHAR(20),
+  unit_no     VARCHAR(10),
+  name        VARCHAR(100) NOT NULL,
   created_by  VARCHAR(50),          -- employee ID
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (job_no, unit_no, name)
 );
+-- One-time (2026-10-26): folders were global; now per job + unit. Existing
+-- folders get their job + unit from their P&IDs (db/migrate.js).
+ALTER TABLE pid_folders ADD COLUMN IF NOT EXISTS job_no VARCHAR(20);
+ALTER TABLE pid_folders ADD COLUMN IF NOT EXISTS unit_no VARCHAR(10);
+ALTER TABLE pid_folders DROP CONSTRAINT IF EXISTS pid_folders_name_key;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'pid_folders'::regclass AND contype = 'u') THEN
+    ALTER TABLE pid_folders ADD CONSTRAINT pid_folders_job_unit_name_key UNIQUE (job_no, unit_no, name);
+  END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS idx_pid_folders_unit ON pid_folders (job_no, unit_no);
 
 -- One row per P&ID sheet (ePULSE pid_master_index.id) selected into a
 -- folder. The current revision is always resolved live from ePULSE.

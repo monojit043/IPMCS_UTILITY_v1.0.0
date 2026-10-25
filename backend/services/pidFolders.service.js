@@ -1,9 +1,10 @@
 const { query } = require('../config/db');
 const { namesFor } = require('./auth.service');
 
-// Folders record who made them by employee ID; the name is read live from PC-2.
+// Folders belong to one job + unit and record who made them by employee ID;
+// the name is read live from PC-2.
 const FOLDER_COLUMNS = `
-  f.id, f.name, f.created_at AS "createdAt", f.created_by AS "createdByEmpId",
+  f.id, f.job_no AS "jobNo", f.unit_no AS "unitNo", f.name, f.created_at AS "createdAt", f.created_by AS "createdByEmpId",
   (SELECT COUNT(*) FROM pid_folder_selections s WHERE s.folder_id = f.id)::int AS "documentCount"
 `;
 
@@ -12,18 +13,28 @@ async function withNames(rows) {
   return rows.map((r) => ({ ...r, createdBy: names.get(String(r.createdByEmpId || '').toUpperCase()) || r.createdByEmpId }));
 }
 
-async function getAll() {
-  const { rows } = await query(`SELECT ${FOLDER_COLUMNS} FROM pid_folders f ORDER BY f.name`);
+async function getAll(jobNo, unitNo) {
+  const { rows } = await query(
+    `SELECT ${FOLDER_COLUMNS} FROM pid_folders f WHERE f.job_no = $1 AND f.unit_no = $2 ORDER BY f.name`,
+    [jobNo, unitNo]
+  );
   return withNames(rows);
 }
 
-async function create(name, empId) {
+async function getFolder(id) {
+  const { rows } = await query(`SELECT ${FOLDER_COLUMNS} FROM pid_folders f WHERE f.id = $1`, [id]);
+  return rows[0] || null;
+}
+
+// null when the job + unit already has a folder of that name
+async function create(jobNo, unitNo, name, empId) {
   const { rows } = await query(
-    `INSERT INTO pid_folders (name, created_by) VALUES ($1, $2) RETURNING id`,
-    [name, empId]
+    `INSERT INTO pid_folders (job_no, unit_no, name, created_by) VALUES ($1, $2, $3, $4)
+     ON CONFLICT (job_no, unit_no, name) DO NOTHING RETURNING id`,
+    [jobNo, unitNo, name, empId]
   );
-  const { rows: full } = await query(`SELECT ${FOLDER_COLUMNS} FROM pid_folders f WHERE f.id = $1`, [rows[0].id]);
-  return (await withNames(full))[0];
+  if (!rows.length) return null;
+  return (await withNames([await getFolder(rows[0].id)]))[0];
 }
 
 // Which ePULSE P&ID sheets (master index ids) are selected into a folder.
@@ -50,4 +61,4 @@ async function removeSelection(folderId, masterIndexId) {
   );
 }
 
-module.exports = { getAll, create, getSelections, addSelection, removeSelection };
+module.exports = { getAll, getFolder, create, getSelections, addSelection, removeSelection };
