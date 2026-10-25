@@ -440,5 +440,10 @@ input.inline-input:focus { border-color: var(--color-accent); box-shadow: 0 0 0 
 .entry-split.sppid-collapsed .extracted-col .col-head {
   writing-mode: vertical-rl; height: 100%; padding: 10px 0; justify-content: flex-start; align-items: center; gap: 8px;
 }
-.entry-split.sppid-collapsed .extracted-col .col-head span:nth-of-type(1) { flex: 0; }
+.entry-split.sppid-collapsed .extracted-col .col-head { white-space: nowrap; overflow: hidden; }
+.entry-split.sppid-collapsed .extracted-col .col-head span:nth-of-type(1) { flex: none; }
+.entry-split.sppid-collapsed .extracted-col .col-head .badge {
+  padding: 0; border: 0; background: none; font-size: 9px; color: var(--text-faint); flex: none;
+}
+.entry-split.sppid-collapsed .extracted-col .col-head .badge::before { content: "· "; }
 .entry-split.sppid-collapsed .sppid-toggle i { transform: rotate(180deg); }
