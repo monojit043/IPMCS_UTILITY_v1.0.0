@@ -36,6 +36,12 @@ html, body { height: 100%; overflow: hidden; }
   font-size: 11px; color: var(--text-secondary); font-family: var(--font-mono);
 }
 .project-pill i { font-size: 13px; color: var(--color-accent-strong); }
+.folder-pill select {
+  background: transparent; border: none; color: var(--text-primary);
+  font-family: var(--font-mono); font-size: 11px; cursor: pointer; outline: none; max-width: 160px;
+}
+.folder-pill select option { background: var(--color-surface-raised); color: var(--text-primary); }
+.pid-newer-rev { color: var(--color-warning, #e8a33d); font-weight: 600; }
 .user-btn {
   display: flex; align-items: center; gap: 7px; padding: 4px 10px; border-radius: var(--radius-sm);
   cursor: pointer; background: var(--color-surface-raised); border: 1px solid var(--color-border-strong);

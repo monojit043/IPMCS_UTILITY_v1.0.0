@@ -8,7 +8,7 @@ function list(req, res) {
 
 // GET /api/reports/:type — CSV for the user's job + current unit
 async function download(req, res) {
-  const out = await reports.build(req.params.type, req.user.jobNo, req.user.unitNo);
+  const out = await reports.build(req.params.type, req.user.jobNo, req.user.unitNo, req.folder);
   if (!out) throw new HttpError(404, 'Unknown report');
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${out.filename}"`);

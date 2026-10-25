@@ -1,37 +1,29 @@
 const { query, queryEpulse } = require('../config/db');
+const lineData = require('./lineData.service');
 
-// MTO progress for a unit: ePULSE's zone PLAN (piping_line_list, made in
-// ePULSE → Create Piping Line List → zone allocation) side by side with what
-// IPMCS has DONE (mto_line_zones saved with at least one MTO row).
+// MTO progress of one MTO folder: ePULSE's zone PLAN (piping_line_list, made
+// in ePULSE → Create Piping Line List → zone allocation) for the lines on the
+// folder's pinned P&IDs, side by side with what IPMCS has DONE in that folder
+// (line + zones saved with at least one MTO row).
 // A line is matched on service + LSR NO (+ "-" sub-line), zones on their letter.
 
 const keyOf = (service, seq) => `${String(service || '').trim()}|${String(seq || '').trim()}`;
 
-async function getSummary(jobNo, unitNo) {
-  const [{ rows: plan }, { rows: done }, { rows: [src] }] = await Promise.all([
+async function getSummary(jobNo, unitNo, folder) {
+  const [{ rows: unitPlan }, { rows: done }, folderLines] = await Promise.all([
     queryEpulse(
       `SELECT service, seq_no, line_no, zone FROM piping_line_list WHERE job_no = $1 AND unit_no = $2`,
       [jobNo, unitNo]
     ),
     query(
       `SELECT service, lsr_no, subline_no, zone, items_count, status FROM mto_line_zones
-       WHERE job_no = $1 AND unit_no = $2`,
-      [jobNo, unitNo]
+       WHERE job_no = $1 AND unit_no = $2 AND folder_id = $3`,
+      [jobNo, unitNo, folder.id]
     ),
-    // every line the sources know (line list + current P&IDs), for reference
-    queryEpulse(
-      `SELECT count(*)::int AS n FROM (
-         SELECT service, line_no AS seq FROM line_list
-         WHERE project_id = $1 AND (parent_unit = $2 OR split_part(unit_no, ' ', 1) = $2)
-         UNION
-         SELECT e.service, e.seq_no || coalesce('-' || e.sub_line, '')
-         FROM pid_extracted_lines e
-         JOIN pid_documents d ON d.id = e.document_id AND d.status = 'current'
-         JOIN pid_master_index m ON m.id = e.master_index_id AND m.status = 'active'
-         WHERE m.job_no = $1 AND e.unit_no = $2) s`,
-      [jobNo, unitNo]
-    ),
+    lineData.getLineKeys(jobNo, unitNo, folder.scope),   // every line on the folder's P&IDs
   ]);
+  const plan = unitPlan.filter((p) => folderLines.has(keyOf(p.service, p.seq_no)));
+  const src = { n: folderLines.size };
 
   // Plan: line → set of zones
   const planned = new Map();
@@ -80,9 +72,10 @@ async function getSummary(jobNo, unitNo) {
   }
 
   return {
-    hasPlan: plan.length > 0,
+    hasPlan: unitPlan.length > 0,
+    folder: { id: folder.id, name: folder.name, pids: folder.scope.pidNames.length },
     lines: {
-      inSources: src.n,                 // line list + current P&IDs
+      inSources: src.n,                 // lines on the folder's P&IDs (+ their line-list lines)
       planned: planned.size,            // lines with at least one zone in the plan
       started,                          // MTO taken in at least one planned zone
       complete,                         // MTO taken in all planned zones

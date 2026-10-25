@@ -30,7 +30,7 @@ const pidsText = (pids) => (pids || []).map((p) => `${p.pidName} Rev ${p.rev ?? 
 const lineKey = (z) => [z.contrCode, z.service, z.unitNo, z.lsrNo, z.sublineNo, z.drgIndicator, z.drgAreaNo].map((v) => v || '').join('');
 
 // Saved line zones of the unit with live line data + latest revision
-async function zonesWithLines(jobNo, unitNo) {
+async function zonesWithLines(jobNo, unitNo, folder) {
   const { rows: zones } = await query(
     `SELECT z.id, z.job_no AS "jobNo", z.unit_no AS "unitNo", z.service, z.lsr_no AS "lsrNo", z.subline_no AS "sublineNo", z.zone,
             z.contr_code AS "contrCode", z.drg_indicator AS "drgIndicator", z.drg_area_no AS "drgAreaNo", z.drg_rev_no AS "drgRevNo",
@@ -43,45 +43,45 @@ async function zonesWithLines(jobNo, unitNo) {
      FROM mto_line_zones z
      LEFT JOIN LATERAL (SELECT rev_no, saved_by, saved_at, basis FROM mto_line_zone_revisions
                         WHERE line_zone_id = z.id ORDER BY rev_no DESC LIMIT 1) r ON true
-     WHERE z.job_no = $1 AND z.unit_no = $2
+     WHERE z.job_no = $1 AND z.unit_no = $2 AND z.folder_id = $3
      ORDER BY z.service, z.lsr_no, z.subline_no, z.zone`,
-    [jobNo, unitNo]
+    [jobNo, unitNo, folder.id]
   );
   const keys = zones.map((z) => ({ service: z.service, lsrNo: z.lsrNo, sublineNo: z.sublineNo }));
-  const data = await lineData.getLineDataBulk(jobNo, unitNo, keys);
+  const data = await lineData.getLineDataBulk(jobNo, unitNo, folder.scope, keys);
   const lines = zones.map((z) => data.get(`${z.service}|${z.lsrNo}|${z.sublineNo || ''}`) || null);
-  const bases = await lineData.getBasisBulk(jobNo, lines);
+  const bases = await lineData.getBasisBulk(jobNo, lines, folder.scope);
   return zones.map((z, i) => ({ ...z, line: lines[i], liveBasis: bases[i] }));
 }
 
-async function bomRows(jobNo, unitNo, table) {
-  const zones = await zonesWithLines(jobNo, unitNo);
+async function bomRows(jobNo, unitNo, folder, table) {
+  const zones = await zonesWithLines(jobNo, unitNo, folder);
   const byId = new Map(zones.map((z) => [z.id, z]));
   const { rows } = await query(
     `SELECT i.line_zone_id AS zid, i.piping_class, i.input_code, i.item_code, i.dia1, i.dia2, i.qty
      FROM ${table} i JOIN mto_line_zones z ON z.id = i.line_zone_id
-     WHERE z.job_no = $1 AND z.unit_no = $2 ORDER BY z.service, z.lsr_no, z.subline_no, z.zone, i.id`,
-    [jobNo, unitNo]
+     WHERE z.job_no = $1 AND z.unit_no = $2 AND z.folder_id = $3 ORDER BY z.service, z.lsr_no, z.subline_no, z.zone, i.id`,
+    [jobNo, unitNo, folder.id]
   );
-  const header = ['Job', 'Unit', 'Line Key (COSMAS)', 'Line No', 'Service', 'LSR NO', 'Subline No', 'Zone',
+  const header = ['Job', 'Unit', 'MTO folder', 'Line Key (COSMAS)', 'Line No', 'Service', 'LSR NO', 'Subline No', 'Zone',
     'Contr.Code', 'DRG Indicator', 'DRG Area No', 'DRG Rev No', 'Batch No', 'Batch Rev No',
     'Piping Class', 'Input Code', 'Item Code', 'Dia1', 'Dia2', 'Qty', 'Rev', 'Saved by', 'Saved at'];
   const out = rows.map((r) => {
     const z = byId.get(r.zid);
-    return [z.jobNo, z.unitNo, lineKey(z), z.line ? z.line.lineNo : '', z.service, z.lsrNo, z.sublineNo, z.zone,
+    return [z.jobNo, z.unitNo, folder.name, lineKey(z), z.line ? z.line.lineNo : '', z.service, z.lsrNo, z.sublineNo, z.zone,
       z.contrCode, z.drgIndicator, z.drgAreaNo, z.drgRevNo, z.batchNo, z.batchRevNo,
       r.piping_class, r.input_code, r.item_code, r.dia1, r.dia2, r.qty, z.revNo, z.updatedBy, z.updatedAt];
   });
   return { header, rows: out };
 }
 
-async function zoneStatus(jobNo, unitNo) {
-  const zones = await zonesWithLines(jobNo, unitNo);
+async function zoneStatus(jobNo, unitNo, folder) {
+  const zones = await zonesWithLines(jobNo, unitNo, folder);
   const { rows: plan } = await queryEpulse(`SELECT service, seq_no, upper(zone) AS zone FROM piping_line_list WHERE job_no = $1 AND unit_no = $2`, [jobNo, unitNo]);
   const planned = new Set(plan.map((p) => `${p.service}|${p.seq_no}|${p.zone}`));
   const names = await namesFor(zones.map((z) => z.updatedBy));
   const header = ['Line No', 'Service', 'LSR NO', 'Subline No', 'Zone', 'In zone plan', 'Status', 'MTO rows', 'Model dump rows',
-    'Line Key (COSMAS)', 'Size', 'Piping Class', 'INS Type', 'Des Press', 'Des Temp', 'P&ID (current rev)', 'Picked from',
+    'Line Key (COSMAS)', 'Size', 'Piping Class', 'INS Type', 'Des Press', 'Des Temp', 'P&ID (folder rev)', 'Picked from',
     'Last rev', 'Last saved by', 'Last saved at', 'Line data changed since last save'];
   const rows = zones.map((z) => {
     const seq = z.sublineNo ? `${z.lsrNo}-${z.sublineNo}` : z.lsrNo;
@@ -99,15 +99,15 @@ async function zoneStatus(jobNo, unitNo) {
 }
 
 // Every line + zone of the unit as objects (the Lines window: search / delete / print)
-async function overview(jobNo, unitNo) {
-  const zones = await zonesWithLines(jobNo, unitNo);
+async function overview(jobNo, unitNo, folder) {
+  const zones = await zonesWithLines(jobNo, unitNo, folder);
   const { rows: plan } = await queryEpulse(`SELECT service, seq_no, upper(zone) AS zone FROM piping_line_list WHERE job_no = $1 AND unit_no = $2`, [jobNo, unitNo]);
   const planned = new Set(plan.map((p) => `${p.service}|${p.seq_no}|${p.zone}`));
   const names = await namesFor(zones.map((z) => z.updatedBy));
   return zones.map((z) => {
     const seq = z.sublineNo ? `${z.lsrNo}-${z.sublineNo}` : z.lsrNo;
     const changes = !z.basis ? []
-      : !z.line ? [{ label: 'Line', was: z.basis.lineNo, now: 'no longer in line list / P&IDs' }]
+      : !z.line ? [{ label: 'Line', was: z.basis.lineNo, now: "no longer on this folder's P&IDs" }]
       : lineData.compareBasis(z.basis, z.liveBasis);
     return {
       id: z.id, lineNo: z.line ? z.line.lineNo : null, service: z.service, lsrNo: z.lsrNo, sublineNo: z.sublineNo, zone: z.zone,
@@ -120,39 +120,41 @@ async function overview(jobNo, unitNo) {
   });
 }
 
-async function progress(jobNo, unitNo) {
-  const s = await summary.getSummary(jobNo, unitNo);
+async function progress(jobNo, unitNo, folder) {
+  const s = await summary.getSummary(jobNo, unitNo, folder);
   const header = ['Zone', 'Planned (ePULSE)', 'MTO taken (IPMCS)', 'Left', 'Not in plan'];
   const rows = s.zones.map((z) => [z.zone, z.planned, z.taken, z.left, z.notInPlan]);
   rows.push(['Total', s.lineZones.planned, s.lineZones.taken, s.lineZones.left, s.lineZones.notInPlan]);
   rows.push([]);
-  rows.push(['Lines', 'In zone plan', 'MTO taken', 'All zones done', 'Left', 'Lines in line list + P&IDs']);
+  rows.push(['Lines', 'In zone plan', 'MTO taken', 'All zones done', 'Left', "Lines on the folder's P&IDs"]);
   rows.push(['', s.lines.planned, s.lines.started, s.lines.complete, s.lines.left, s.lines.inSources]);
   if (!s.hasPlan) rows.push(['No zone plan for this unit in ePULSE yet (Create Piping Line List → zone allocation)']);
   return { header, rows };
 }
 
-async function pending(jobNo, unitNo) {
-  const [{ rows: plan }, { rows: done }] = await Promise.all([
+async function pending(jobNo, unitNo, folder) {
+  const [{ rows: unitPlan }, { rows: done }, folderLines] = await Promise.all([
     queryEpulse(`SELECT service, seq_no, line_no, upper(zone) AS zone, size_in, piping_spec FROM piping_line_list
                  WHERE job_no = $1 AND unit_no = $2 ORDER BY service, seq_no, zone`, [jobNo, unitNo]),
-    query(`SELECT service, lsr_no, subline_no, zone, items_count FROM mto_line_zones WHERE job_no = $1 AND unit_no = $2`, [jobNo, unitNo]),
+    query(`SELECT service, lsr_no, subline_no, zone, items_count FROM mto_line_zones WHERE job_no = $1 AND unit_no = $2 AND folder_id = $3`, [jobNo, unitNo, folder.id]),
+    lineData.getLineKeys(jobNo, unitNo, folder.scope),
   ]);
+  const plan = unitPlan.filter((p) => folderLines.has(`${p.service}|${p.seq_no}`));
   const taken = new Map(done.map((z) => [`${z.service}|${z.subline_no ? `${z.lsr_no}-${z.subline_no}` : z.lsr_no}|${z.zone}`, z.items_count]));
   const header = ['Line No (plan)', 'Service', 'LSR NO', 'Zone', 'Size', 'Piping Class', 'IPMCS'];
   const rows = plan.filter((p) => !(taken.get(`${p.service}|${p.seq_no}|${p.zone}`) > 0)).map((p) => [
     p.line_no, p.service, p.seq_no, p.zone, p.size_in, p.piping_spec,
     taken.has(`${p.service}|${p.seq_no}|${p.zone}`) ? 'saved, no MTO rows' : 'not started']);
-  if (!plan.length) rows.push(['No zone plan for this unit in ePULSE yet (Create Piping Line List → zone allocation)']);
+  if (!unitPlan.length) rows.push(['No zone plan for this unit in ePULSE yet (Create Piping Line List → zone allocation)']);
   return { header, rows };
 }
 
-async function revisions(jobNo, unitNo) {
+async function revisions(jobNo, unitNo, folder) {
   const { rows } = await query(
     `SELECT z.service, z.lsr_no, z.subline_no, z.zone, r.rev_no, r.kind, r.saved_by, r.saved_at, r.row_count, r.basis, r.header, r.note
      FROM mto_line_zone_revisions r JOIN mto_line_zones z ON z.id = r.line_zone_id
-     WHERE z.job_no = $1 AND z.unit_no = $2 ORDER BY z.service, z.lsr_no, z.subline_no, z.zone, r.rev_no`,
-    [jobNo, unitNo]
+     WHERE z.job_no = $1 AND z.unit_no = $2 AND z.folder_id = $3 ORDER BY z.service, z.lsr_no, z.subline_no, z.zone, r.rev_no`,
+    [jobNo, unitNo, folder.id]
   );
   const names = await namesFor(rows.map((r) => r.saved_by));
   const header = ['Service', 'LSR NO', 'Subline No', 'Zone', 'Rev', 'Tab', 'Saved by', 'Saved at', 'Rows',
@@ -169,17 +171,18 @@ async function revisions(jobNo, unitNo) {
   return { header, rows: out };
 }
 
-async function build(type, jobNo, unitNo) {
+async function build(type, jobNo, unitNo, folder) {
   const def = REPORTS[type];
   if (!def) return null;
-  const t = type === 'mto-bom' ? await bomRows(jobNo, unitNo, 'manual_mto_data')
-    : type === 'model-dump' ? await bomRows(jobNo, unitNo, 'model_dump_data')
-    : type === 'zone-status' ? await zoneStatus(jobNo, unitNo)
-    : type === 'progress' ? await progress(jobNo, unitNo)
-    : type === 'pending' ? await pending(jobNo, unitNo)
-    : await revisions(jobNo, unitNo);
+  const t = type === 'mto-bom' ? await bomRows(jobNo, unitNo, folder, 'manual_mto_data')
+    : type === 'model-dump' ? await bomRows(jobNo, unitNo, folder, 'model_dump_data')
+    : type === 'zone-status' ? await zoneStatus(jobNo, unitNo, folder)
+    : type === 'progress' ? await progress(jobNo, unitNo, folder)
+    : type === 'pending' ? await pending(jobNo, unitNo, folder)
+    : await revisions(jobNo, unitNo, folder);
   const stamp = new Date().toISOString().slice(0, 10);
-  return { filename: `${jobNo}_${unitNo}_${def.file}_${stamp}.csv`, csv: toCsv(t.header, t.rows), rows: t.rows.length };
+  const safe = String(folder.name).replace(/[^\w.-]+/g, '_');
+  return { filename: `${jobNo}_${unitNo}_${safe}_${def.file}_${stamp}.csv`, csv: toCsv(t.header, t.rows), rows: t.rows.length };
 }
 
 module.exports = { REPORTS, build, overview };

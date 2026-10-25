@@ -125,8 +125,8 @@ CREATE TABLE IF NOT EXISTS mto_line_zones (
   created_by         VARCHAR(50),
   created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_by         VARCHAR(50),
-  updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (job_no, unit_no, service, lsr_no, subline_no, zone)
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+  -- unique per MTO folder: see "MTO folders" at the end (folder_id)
 );
 CREATE INDEX IF NOT EXISTS idx_mto_line_zones_unit ON mto_line_zones (job_no, unit_no);
 -- 2026-10-25: piping class / INS type / OPR & Des temps were editable copies of
@@ -335,8 +335,8 @@ CREATE TABLE IF NOT EXISTS pid_user_highlights (
   page_num     INTEGER NOT NULL DEFAULT 1,
   emp_id       VARCHAR(50) NOT NULL,   -- whose strokes
   strokes      JSONB NOT NULL DEFAULT '[]',
-  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (document_id, page_num, emp_id)
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+  -- unique per drawing REVISION: see "MTO folders" at the end (revision_doc_id)
 );
 
 -- Auto-detected junctions where two highlight strokes of different zones
@@ -354,3 +354,45 @@ CREATE TABLE IF NOT EXISTS pid_zone_breaks (
 );
 ALTER TABLE pid_zone_breaks ADD COLUMN IF NOT EXISTS zone_a VARCHAR(10);
 ALTER TABLE pid_zone_breaks ADD COLUMN IF NOT EXISTS zone_b VARCHAR(10);
+
+-- ── MTO folders: fixed sets of P&ID revisions (decided 2026-10-26) ──
+-- An ML / Lead builds a folder (MTO-1, MTO-2 …); each P&ID added is PINNED at
+-- the revision current at that moment (document_id = ePULSE pid_documents.id).
+-- "Freeze" locks the folder; JEs take MTO only in frozen folders, only for
+-- lines on its pinned P&IDs, and MTO is separate per folder. A newer revision
+-- is for the next MTO folder. Highlights are per drawing revision.
+ALTER TABLE pid_folders ADD COLUMN IF NOT EXISTS status VARCHAR(10) NOT NULL DEFAULT 'open';
+ALTER TABLE pid_folders ADD COLUMN IF NOT EXISTS frozen_by VARCHAR(50);
+ALTER TABLE pid_folders ADD COLUMN IF NOT EXISTS frozen_at TIMESTAMPTZ;
+ALTER TABLE pid_folder_selections ADD COLUMN IF NOT EXISTS document_id INTEGER;   -- pinned revision
+ALTER TABLE pid_folder_selections ADD COLUMN IF NOT EXISTS rev_label VARCHAR(20);
+ALTER TABLE pid_user_highlights ADD COLUMN IF NOT EXISTS revision_doc_id INTEGER;
+ALTER TABLE pid_zone_breaks ADD COLUMN IF NOT EXISTS revision_doc_id INTEGER;
+ALTER TABLE mto_line_zones ADD COLUMN IF NOT EXISTS folder_id INTEGER REFERENCES pid_folders(id);
+ALTER TABLE mto_line_zone_deletions ADD COLUMN IF NOT EXISTS folder_id INTEGER;
+DO $$
+DECLARE r record;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'pid_folders_status_check') THEN
+    ALTER TABLE pid_folders ADD CONSTRAINT pid_folders_status_check CHECK (status IN ('open', 'frozen'));
+  END IF;
+  -- line + zone unique per folder (drop the older unit-wide key, whatever its name)
+  FOR r IN SELECT conname FROM pg_constraint WHERE conrelid = 'mto_line_zones'::regclass AND contype = 'u'
+           AND conname <> 'mto_line_zones_folder_line_zone_key' LOOP
+    EXECUTE format('ALTER TABLE mto_line_zones DROP CONSTRAINT %I', r.conname);
+  END LOOP;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'mto_line_zones_folder_line_zone_key') THEN
+    ALTER TABLE mto_line_zones ADD CONSTRAINT mto_line_zones_folder_line_zone_key
+      UNIQUE (folder_id, job_no, unit_no, service, lsr_no, subline_no, zone);
+  END IF;
+  -- highlights unique per drawing revision
+  FOR r IN SELECT conname FROM pg_constraint WHERE conrelid = 'pid_user_highlights'::regclass AND contype = 'u'
+           AND conname <> 'pid_user_highlights_rev_page_emp_key' LOOP
+    EXECUTE format('ALTER TABLE pid_user_highlights DROP CONSTRAINT %I', r.conname);
+  END LOOP;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'pid_user_highlights_rev_page_emp_key') THEN
+    ALTER TABLE pid_user_highlights ADD CONSTRAINT pid_user_highlights_rev_page_emp_key UNIQUE (revision_doc_id, page_num, emp_id);
+  END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS idx_mto_line_zones_folder ON mto_line_zones (folder_id);
+CREATE INDEX IF NOT EXISTS idx_pid_zone_breaks_rev ON pid_zone_breaks (revision_doc_id, page_num);

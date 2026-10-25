@@ -19,6 +19,10 @@
     <div class="tb-brand"><i class="ti ti-package"></i>IPMCS</div>
     <div class="tb-right">
       <div class="project-pill" id="projectPillEl"><i class="ti ti-briefcase"></i>—</div>
+      <label class="project-pill folder-pill" title="MTO folder — the frozen set of P&amp;ID revisions MTO is taken on">
+        <i class="ti ti-folder-check"></i>MTO folder
+        <select id="folderSelect"><option value="">—</option></select>
+      </label>
       <button class="theme-toggle" title="Toggle light / dark theme">
         <i class="ti ti-sun"></i>
       </button>
@@ -733,8 +737,12 @@
                   <div class="tool-btn" id="pidBackToFoldersBtn" title="Back to folders"><i class="ti ti-arrow-left"></i></div>
                   <span class="pane-title" id="pidFolderTitle">Folder</span>
                   <span class="badge badge-muted" id="pidDocCountBadge">0 P&amp;IDs</span>
+                  <span class="badge" id="pidFolderStatusBadge"></span>
                   <button class="btn btn-primary btn-sm" id="pidSelectBtn" style="display:none">
                     <i class="ti ti-list-check"></i>Select P&amp;IDs
+                  </button>
+                  <button class="btn btn-primary btn-sm" id="pidFreezeBtn" style="display:none" title="Fix this folder's P&amp;IDs at their current revisions — MTO can then be taken in it">
+                    <i class="ti ti-lock"></i>Freeze
                   </button>
                 </div>
                 <div class="pid-card-grid" id="pidDocGrid"></div>

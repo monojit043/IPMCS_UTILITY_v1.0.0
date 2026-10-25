@@ -13,7 +13,7 @@ const HEADER = {
   insThirdParty: ['ins_third_party', 60], paintThirdParty: ['paint_third_party', 60],
 };
 const ZONE_COLUMNS = `
-  id, job_no AS "jobNo", unit_no AS "unitNo", service, lsr_no AS "lsrNo", subline_no AS "sublineNo", zone,
+  id, folder_id AS "folderId", job_no AS "jobNo", unit_no AS "unitNo", service, lsr_no AS "lsrNo", subline_no AS "sublineNo", zone,
   ${Object.entries(HEADER).map(([k, [c]]) => `${c} AS "${k}"`).join(', ')},
   bolt_tensioning AS "boltTensioning", status, items_count AS items,
   created_by AS "createdBy", created_at AS "createdAt", updated_by AS "updatedBy", updated_at AS "updatedAt"
@@ -63,27 +63,27 @@ function cleanRows(rows) {
 const keyOf = (z) => ({ service: z.service, lsrNo: z.lsrNo, sublineNo: z.sublineNo });
 const dataKey = (z) => `${z.service}|${z.lsrNo}|${z.sublineNo || ''}`;
 
-// Saved zones of a unit, each with its live line data (for the summary list / navigation)
-async function listZones(jobNo, unitNo) {
+// Saved zones of an MTO folder, each with its line data (navigation)
+async function listZones(jobNo, unitNo, folder) {
   const { rows } = await query(
-    `SELECT ${ZONE_COLUMNS} FROM mto_line_zones WHERE job_no = $1 AND unit_no = $2
+    `SELECT ${ZONE_COLUMNS} FROM mto_line_zones WHERE job_no = $1 AND unit_no = $2 AND folder_id = $3
      ORDER BY service, lsr_no, subline_no, zone`,
-    [jobNo, unitNo]
+    [jobNo, unitNo, folder.id]
   );
-  const data = await lineData.getLineDataBulk(jobNo, unitNo, rows.map(keyOf));
+  const data = await lineData.getLineDataBulk(jobNo, unitNo, folder.scope, rows.map(keyOf));
   return rows.map((z) => ({ ...z, line: data.get(dataKey(z)) || null }));
 }
 
 // Zones for one line: the zones ePULSE's zone plan (piping_line_list) gives
 // it, plus any zone already saved in IPMCS — each with its state.
 // unitHasPlan tells the page whether this unit has a zone plan at all.
-async function zonesForLine(jobNo, unitNo, service, lsrNo, sublineNo) {
+async function zonesForLine(jobNo, unitNo, folder, service, lsrNo, sublineNo) {
   const seq = sublineNo ? `${lsrNo}-${sublineNo}` : lsrNo;
   const [{ rows: saved }, { rows: planned }, { rows: [plan] }] = await Promise.all([
     query(
       `SELECT id, zone, status, items_count AS items FROM mto_line_zones
-       WHERE job_no = $1 AND unit_no = $2 AND service = $3 AND lsr_no = $4 AND subline_no = $5`,
-      [jobNo, unitNo, service, lsrNo, sublineNo || '']
+       WHERE job_no = $1 AND unit_no = $2 AND service = $3 AND lsr_no = $4 AND subline_no = $5 AND folder_id = $6`,
+      [jobNo, unitNo, service, lsrNo, sublineNo || '', folder.id]
     ),
     queryEpulse(
       `SELECT DISTINCT upper(zone) AS zone FROM piping_line_list
@@ -124,18 +124,18 @@ async function lastRevision(zoneId) {
 
 // Everything the page needs for one saved zone, plus what changed in the
 // line data since it was last saved (live basis vs the last revision's basis)
-async function getZoneFull(id) {
+async function getZoneFull(id, folder) {
   const zone = await getZone(id);
   if (!zone) return null;
   const [line, mto, dump, extracted, last] = await Promise.all([
-    lineData.getLineData(zone.jobNo, zone.unitNo, zone.service, zone.lsrNo, zone.sublineNo),
+    lineData.getLineData(zone.jobNo, zone.unitNo, folder.scope, zone.service, zone.lsrNo, zone.sublineNo),
     getItems('mto', id), getItems('dump', id), getItems('extracted', id), lastRevision(id),
   ]);
   let basisChanges = [];
   if (last) {
     basisChanges = line
-      ? lineData.compareBasis(last.basis, await lineData.getBasis(zone.jobNo, line))
-      : [{ field: 'line', label: 'Line', was: last.basis.lineNo, now: 'no longer in the line list / P&IDs' }];
+      ? lineData.compareBasis(last.basis, await lineData.getBasis(zone.jobNo, line, folder.scope))
+      : [{ field: 'line', label: 'Line', was: last.basis.lineNo, now: "no longer on this MTO folder's P&IDs / line list" }];
   }
   const lastRev = last ? (({ basis, ...rest }) => rest)(last) : null;
   return { zone, line, mto, dump, extracted, lastRevision: lastRev, basisChanges };
@@ -162,29 +162,30 @@ async function getRevision(zoneId, revNo) {
 
 // Save = upsert the line + zone with its header, and replace the BoM rows of
 // one tab (kind 'mto' or 'dump') — all in one transaction.
-async function saveZone({ jobNo, unitNo, empId, service, lsrNo, sublineNo, zone, header, kind, rows }) {
+async function saveZone({ jobNo, unitNo, empId, folder, service, lsrNo, sublineNo, zone, header, kind, rows }) {
   const z = normalizeZone(zone);
   if (!z) throw new InputError('Zone must be 1–3 letters or digits, e.g. A');
   const table = ITEM_TABLES[kind];
   if (!table) throw new InputError('kind must be mto or dump');
-  const line = await lineData.getLineData(jobNo, unitNo, service, lsrNo, sublineNo || '');
-  if (!line) throw new InputError('This line is not in the line list or the uploaded P&IDs');
+  const line = await lineData.getLineData(jobNo, unitNo, folder.scope, service, lsrNo, sublineNo || '');
+  if (!line) throw new InputError(`This line is not on the P&IDs of MTO folder "${folder.name}"`);
   const h = cleanHeader(header);
   const values = cleanRows(rows);
-  const basis = await lineData.getBasis(jobNo, line);   // what this save is based on
+  const basis = await lineData.getBasis(jobNo, line, folder.scope);   // what this save is based on
+  basis.folder = { id: folder.id, name: folder.name };
 
   const cols = Object.keys(h);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const { rows: [saved] } = await client.query(
-      `INSERT INTO mto_line_zones (job_no, unit_no, service, lsr_no, subline_no, zone, ${cols.join(', ')}, created_by, updated_by)
-       VALUES ($1,$2,$3,$4,$5,$6, ${cols.map((_, i) => `$${i + 7}`).join(', ')}, $${cols.length + 7}, $${cols.length + 7})
-       ON CONFLICT (job_no, unit_no, service, lsr_no, subline_no, zone)
+      `INSERT INTO mto_line_zones (job_no, unit_no, service, lsr_no, subline_no, zone, ${cols.join(', ')}, created_by, updated_by, folder_id)
+       VALUES ($1,$2,$3,$4,$5,$6, ${cols.map((_, i) => `$${i + 7}`).join(', ')}, $${cols.length + 7}, $${cols.length + 7}, $${cols.length + 8})
+       ON CONFLICT (folder_id, job_no, unit_no, service, lsr_no, subline_no, zone)
        DO UPDATE SET ${cols.map((c) => `${c} = EXCLUDED.${c}`).join(', ')},
                      updated_by = EXCLUDED.updated_by, updated_at = now()
        RETURNING id, status`,
-      [jobNo, unitNo, service, lsrNo, sublineNo || '', z, ...cols.map((c) => h[c]), empId]
+      [jobNo, unitNo, service, lsrNo, sublineNo || '', z, ...cols.map((c) => h[c]), empId, folder.id]
     );
     await client.query(`DELETE FROM ${table} WHERE line_zone_id = $1`, [saved.id]);
     for (const v of values) {
@@ -208,7 +209,7 @@ async function saveZone({ jobNo, unitNo, empId, service, lsrNo, sublineNo, zone,
       [saved.id, kind, empId, JSON.stringify(basis), JSON.stringify(headerSaved), JSON.stringify(rowsSaved), rowsSaved.length]
     );
     await client.query('COMMIT');
-    return getZoneFull(saved.id);
+    return getZoneFull(saved.id, folder);
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
@@ -234,9 +235,9 @@ async function deleteZone(id, empId, reason) {
       revisions: await part(`SELECT * FROM mto_line_zone_revisions WHERE line_zone_id = $1 ORDER BY rev_no`),
     };
     const { rows: [archived] } = await client.query(
-      `INSERT INTO mto_line_zone_deletions (line_zone_id, job_no, unit_no, service, lsr_no, subline_no, zone, snapshot, reason, deleted_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id, deleted_at AS "deletedAt"`,
-      [id, zone.job_no, zone.unit_no, zone.service, zone.lsr_no, zone.subline_no, zone.zone, JSON.stringify(snapshot), reason || null, empId]
+      `INSERT INTO mto_line_zone_deletions (line_zone_id, job_no, unit_no, service, lsr_no, subline_no, zone, snapshot, reason, deleted_by, folder_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id, deleted_at AS "deletedAt"`,
+      [id, zone.job_no, zone.unit_no, zone.service, zone.lsr_no, zone.subline_no, zone.zone, JSON.stringify(snapshot), reason || null, empId, zone.folder_id]
     );
     await client.query(`DELETE FROM mto_line_zones WHERE id = $1`, [id]);   // rows + revisions cascade
     await client.query('COMMIT');

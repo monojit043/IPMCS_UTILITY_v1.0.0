@@ -5,29 +5,32 @@ const { namesFor } = require('../services/auth.service');
 const summary = require('../services/summary.service');
 const reports = require('../services/reports.service');
 
+// Everything here works inside one frozen MTO folder (req.folder, see
+// middlewares/folder.js): lines on its pinned P&ID revisions, MTO of that folder.
+
 // ── Line selection: Service → LSR NO → Subline No. (live from ePULSE) ──
 async function services(req, res) {
-  res.json(await lineData.getServices(req.user.jobNo, req.user.unitNo));
+  res.json(await lineData.getServices(req.user.jobNo, req.user.unitNo, req.folder.scope));
 }
 
 async function lsrNos(req, res) {
   const { service } = req.query;
   if (!service) throw new HttpError(400, 'service is required');
-  res.json(await lineData.getLsrNos(req.user.jobNo, req.user.unitNo, service));
+  res.json(await lineData.getLsrNos(req.user.jobNo, req.user.unitNo, req.folder.scope, service));
 }
 
 async function sublines(req, res) {
   const { service, lsr } = req.query;
   if (!service || !lsr) throw new HttpError(400, 'service and lsr are required');
-  res.json(await lineData.getSublines(req.user.jobNo, req.user.unitNo, service, lsr));
+  res.json(await lineData.getSublines(req.user.jobNo, req.user.unitNo, req.folder.scope, service, lsr));
 }
 
 // Line data as soon as Service / Unit / LSR NO / Subline No. are chosen — nothing saved
 async function data(req, res) {
   const { service, lsr, subline = '' } = req.query;
   if (!service || !lsr) throw new HttpError(400, 'service and lsr are required');
-  const line = await lineData.getLineData(req.user.jobNo, req.user.unitNo, service, lsr, subline);
-  if (!line) throw new HttpError(404, 'This line is not in the line list or the uploaded P&IDs');
+  const line = await lineData.getLineData(req.user.jobNo, req.user.unitNo, req.folder.scope, service, lsr, subline);
+  if (!line) throw new HttpError(404, `This line is not on the P&IDs of MTO folder "${req.folder.name}"`);
   res.json(line);
 }
 
@@ -35,26 +38,26 @@ async function data(req, res) {
 async function zones(req, res) {
   const { service, lsr, subline = '' } = req.query;
   if (!service || !lsr) throw new HttpError(400, 'service and lsr are required');
-  res.json(await lineZones.zonesForLine(req.user.jobNo, req.user.unitNo, service, lsr, subline));
+  res.json(await lineZones.zonesForLine(req.user.jobNo, req.user.unitNo, req.folder, service, lsr, subline));
 }
 
 // ── Saved line + zones (mto_line_zones) ──
 async function listZones(req, res) {
-  res.json(await lineZones.listZones(req.user.jobNo, req.user.unitNo));
+  res.json(await lineZones.listZones(req.user.jobNo, req.user.unitNo, req.folder));
 }
 
 async function getZone(req, res) {
-  const full = await lineZones.getZoneFull(req.params.id);
-  if (!full || full.zone.jobNo !== req.user.jobNo || full.zone.unitNo !== req.user.unitNo) {
-    throw new HttpError(404, 'Line zone not found');
-  }
+  await ownZone(req);
+  const full = await lineZones.getZoneFull(req.params.id, req.folder);
   res.json(full);
 }
 
-// Only zones of the user's own job / unit
+// Only zones of the user's own job / unit and of the MTO folder being worked in
 async function ownZone(req) {
   const zone = await lineZones.getZone(req.params.id);
-  if (!zone || zone.jobNo !== req.user.jobNo || zone.unitNo !== req.user.unitNo) throw new HttpError(404, 'Line zone not found');
+  if (!zone || zone.jobNo !== req.user.jobNo || zone.unitNo !== req.user.unitNo || zone.folderId !== req.folder.id) {
+    throw new HttpError(404, 'Line zone not found in this MTO folder');
+  }
   return zone;
 }
 
@@ -79,7 +82,7 @@ async function saveZone(req, res) {
   if (!service || !lsrNo || !zone) throw new HttpError(400, 'service, lsrNo and zone are required');
   try {
     res.json(await lineZones.saveZone({
-      jobNo: req.user.jobNo, unitNo: req.user.unitNo, empId: req.user.empId,
+      jobNo: req.user.jobNo, unitNo: req.user.unitNo, empId: req.user.empId, folder: req.folder,
       service, lsrNo, sublineNo: sublineNo || '', zone, header, kind, rows: rows || [],
     }));
   } catch (err) {
@@ -90,7 +93,7 @@ async function saveZone(req, res) {
 
 // Search/Delete Lines/Print: every line + zone with MTO taken in the unit
 async function searchZones(req, res) {
-  res.json(await reports.overview(req.user.jobNo, req.user.unitNo));
+  res.json(await reports.overview(req.user.jobNo, req.user.unitNo, req.folder));
 }
 
 // Delete a line + zone (archived first). Allowed for whoever created or last
@@ -107,7 +110,7 @@ async function deleteZone(req, res) {
 
 // MTO Summary: ePULSE zone plan vs IPMCS MTO taken, for the unit
 async function getSummary(req, res) {
-  res.json(await summary.getSummary(req.user.jobNo, req.user.unitNo));
+  res.json(await summary.getSummary(req.user.jobNo, req.user.unitNo, req.folder));
 }
 
 module.exports = { searchZones, deleteZone, getSummary, services, lsrNos, sublines, data, zones, listZones, getZone, saveZone, listRevisions, getRevision };

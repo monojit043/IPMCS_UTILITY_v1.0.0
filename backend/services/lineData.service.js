@@ -1,56 +1,75 @@
 const { queryEpulse } = require('../config/db');
 
-// LINE DATA — read live from ePULSE every time, never stored in IPMCS:
-//   1. line_list — the uploaded line list: size, class, insulation, design /
-//      operating P&T, P&ID no. Its unit_no reads "101 (PDH Unit)", so match on
-//      parent_unit or the leading unit number.
-//   2. pid_extracted_lines — lines read off the CURRENT revision of each
-//      uploaded P&ID: size, spec, insulation (and sub-lines, 05341-01).
+// LINE DATA — read live from ePULSE every time, never stored in IPMCS, and
+// always for ONE MTO FOLDER (its "scope"): the folder pins P&ID revisions, so
+//   1. pid_extracted_lines — lines read off exactly those pinned revisions
+//      (ePULSE keeps the lines of every revision): size, spec, insulation,
+//      sub-lines (05341-01);
+//   2. line_list — the line-list lines whose P&ID no. names one of the
+//      folder's P&IDs: size, class, insulation, design / operating P&T. Its
+//      unit_no reads "101 (PDH Unit)", so match on parent_unit or the leading
+//      unit number.
+// scope = { docIds: [pinned pid_documents ids], pidNames: [...], pinned: Map pidName → { rev, documentId } }
 // A line is identified the COSMAS way: Service / Unit / LSR NO / Subline No.
 // Letters are part of the LSR NO (05341A); a sub-line exists only on P&IDs.
-const LL_SCOPE = `project_id = $1 AND (parent_unit = $2 OR split_part(unit_no, ' ', 1) = $2)`;
+
+// $1 job, $2 unit, $3 pinned doc ids, $4 folder P&ID names
+const LL_SCOPE = `project_id = $1 AND (parent_unit = $2 OR split_part(unit_no, ' ', 1) = $2)
+  AND EXISTS (SELECT 1 FROM unnest($4::text[]) n WHERE line_list.pid_no ILIKE '%' || n || '%')
+  AND $3::int[] IS NOT NULL`;   // every query binds all four, so each must be typed
 const PID_LINES = `
   FROM pid_extracted_lines e
-  JOIN pid_documents d ON d.id = e.document_id AND d.status = 'current'
-  JOIN pid_master_index m ON m.id = e.master_index_id AND m.status = 'active'
-  WHERE m.job_no = $1 AND e.unit_no = $2`;
+  JOIN pid_master_index m ON m.id = e.master_index_id
+  WHERE e.document_id = ANY($3::int[]) AND e.unit_no = $2 AND $1::text IS NOT NULL AND $4::text[] IS NOT NULL`;
+const base = (jobNo, unitNo, scope) => [jobNo, unitNo, scope.docIds, scope.pidNames];
 
 const combine = (value, unit) => (value ? [value, unit].filter(Boolean).join(' ') : null);
 
-async function getServices(jobNo, unitNo) {
+async function getServices(jobNo, unitNo, scope) {
   const { rows } = await queryEpulse(
     `SELECT service FROM line_list WHERE ${LL_SCOPE} AND coalesce(service, '') <> ''
      UNION
      SELECT e.service ${PID_LINES} AND coalesce(e.service, '') <> ''
      ORDER BY 1`,
-    [jobNo, unitNo]
+    base(jobNo, unitNo, scope)
   );
   return rows.map((r) => r.service);
 }
 
 // LSR NO — the line number without any sub-line (05341, 05341A)
-async function getLsrNos(jobNo, unitNo, service) {
+async function getLsrNos(jobNo, unitNo, scope, service) {
   const { rows } = await queryEpulse(
-    `SELECT line_no AS lsr FROM line_list WHERE ${LL_SCOPE} AND service = $3 AND coalesce(line_no, '') <> ''
+    `SELECT line_no AS lsr FROM line_list WHERE ${LL_SCOPE} AND service = $5 AND coalesce(line_no, '') <> ''
      UNION
-     SELECT e.seq_no ${PID_LINES} AND e.service = $3 AND coalesce(e.seq_no, '') <> ''
+     SELECT e.seq_no ${PID_LINES} AND e.service = $5 AND coalesce(e.seq_no, '') <> ''
      ORDER BY 1`,
-    [jobNo, unitNo, service]
+    [...base(jobNo, unitNo, scope), service]
   );
   return rows.map((r) => r.lsr);
 }
 
 // Subline No. for one LSR NO — the P&ID sub-lines (01, 02…), with '' for the
 // line itself when it exists without a sub-line.
-async function getSublines(jobNo, unitNo, service, lsrNo) {
+async function getSublines(jobNo, unitNo, scope, service, lsrNo) {
   const { rows } = await queryEpulse(
-    `SELECT '' AS sub FROM line_list WHERE ${LL_SCOPE} AND service = $3 AND line_no = $4
+    `SELECT '' AS sub FROM line_list WHERE ${LL_SCOPE} AND service = $5 AND line_no = $6
      UNION
-     SELECT coalesce(e.sub_line, '') ${PID_LINES} AND e.service = $3 AND e.seq_no = $4
+     SELECT coalesce(e.sub_line, '') ${PID_LINES} AND e.service = $5 AND e.seq_no = $6
      ORDER BY 1`,
-    [jobNo, unitNo, service, lsrNo]
+    [...base(jobNo, unitNo, scope), service, lsrNo]
   );
   return rows.map((r) => r.sub);
+}
+
+// Every line of the folder as "service|seq" (seq with "-sub-line") — summaries
+async function getLineKeys(jobNo, unitNo, scope) {
+  const { rows } = await queryEpulse(
+    `SELECT service || '|' || line_no AS k FROM line_list WHERE ${LL_SCOPE}
+     UNION
+     SELECT e.service || '|' || e.seq_no || coalesce('-' || e.sub_line, '') ${PID_LINES}`,
+    base(jobNo, unitNo, scope)
+  );
+  return new Set(rows.map((r) => r.k));
 }
 
 const LL_COLUMNS = `service, line_no, line_size, line_class, insulation, insulation_thickness, pid_no,
@@ -109,30 +128,30 @@ function mergeSources({ unitNo, service, lsrNo, sublineNo, ll, pid }) {
 }
 
 // The line data shown as soon as Service / Unit / LSR NO / Subline No. are chosen
-async function getLineData(jobNo, unitNo, service, lsrNo, sublineNo = '') {
+async function getLineData(jobNo, unitNo, scope, service, lsrNo, sublineNo = '') {
   const [{ rows: ll }, { rows: pid }] = await Promise.all([
     queryEpulse(
-      `SELECT ${LL_COLUMNS} FROM line_list WHERE ${LL_SCOPE} AND service = $3 AND line_no = $4 ORDER BY id LIMIT 1`,
-      [jobNo, unitNo, service, lsrNo]
+      `SELECT ${LL_COLUMNS} FROM line_list WHERE ${LL_SCOPE} AND service = $5 AND line_no = $6 ORDER BY id LIMIT 1`,
+      [...base(jobNo, unitNo, scope), service, lsrNo]
     ),
     queryEpulse(
-      `SELECT ${PID_COLUMNS} ${PID_LINES} AND e.service = $3 AND e.seq_no = $4 AND coalesce(e.sub_line, '') = $5
+      `SELECT ${PID_COLUMNS} ${PID_LINES} AND e.service = $5 AND e.seq_no = $6 AND coalesce(e.sub_line, '') = $7
        ORDER BY m.pid_name, e.id`,
-      [jobNo, unitNo, service, lsrNo, sublineNo || '']
+      [...base(jobNo, unitNo, scope), service, lsrNo, sublineNo || '']
     ),
   ]);
   return mergeSources({ unitNo, service, lsrNo, sublineNo, ll: ll[0] || null, pid });
 }
 
-// Line data for many lines of one unit at once (lists of saved zones):
+// Line data for many lines of the folder at once (lists of saved zones):
 // two queries, merged in memory. Returns Map "service|lsr|subline" → data.
-async function getLineDataBulk(jobNo, unitNo, keys) {
+async function getLineDataBulk(jobNo, unitNo, scope, keys) {
   const out = new Map();
   if (!keys.length) return out;
   const services = [...new Set(keys.map((k) => k.service))];
   const [{ rows: ll }, { rows: pid }] = await Promise.all([
-    queryEpulse(`SELECT id, ${LL_COLUMNS} FROM line_list WHERE ${LL_SCOPE} AND service = ANY($3) ORDER BY id`, [jobNo, unitNo, services]),
-    queryEpulse(`SELECT ${PID_COLUMNS} ${PID_LINES} AND e.service = ANY($3) ORDER BY m.pid_name, e.id`, [jobNo, unitNo, services]),
+    queryEpulse(`SELECT id, ${LL_COLUMNS} FROM line_list WHERE ${LL_SCOPE} AND service = ANY($5) ORDER BY id`, [...base(jobNo, unitNo, scope), services]),
+    queryEpulse(`SELECT ${PID_COLUMNS} ${PID_LINES} AND e.service = ANY($5) ORDER BY m.pid_name, e.id`, [...base(jobNo, unitNo, scope), services]),
   ]);
   const llBy = new Map();
   ll.forEach((r) => { const k = `${r.service}|${r.line_no}`; if (!llBy.has(k)) llBy.set(k, r); });
@@ -157,61 +176,39 @@ const BASIS_FIELDS = {
   designPressure: 'Des Pressure', designTemp: 'Des Temp1', designTemp2: 'Des Temp2', source: 'Source',
 };
 
-// The line data plus WHICH revisions it came from: each P&ID's current
-// revision and the job's latest line-list upload revision.
-async function getBasis(jobNo, line) {
-  const names = String(line.pidNo || '').split(',').map((s) => s.trim()).filter(Boolean);
-  const [{ rows: pids }, { rows: ll }] = await Promise.all([
-    names.length
-      ? queryEpulse(
-        `SELECT mi.pid_name AS "pidName", d.rev_label AS rev, d.id AS "documentId"
-         FROM pid_master_index mi JOIN pid_documents d ON d.master_index_id = mi.id AND d.status = 'current'
-         WHERE mi.job_no = $1 AND mi.pid_name = ANY($2) ORDER BY mi.pid_name`,
-        [jobNo, names])
-      : { rows: [] },
-    queryEpulse(
-      `SELECT id AS "uploadId", rev_no AS "revNo", uploaded_at AS "uploadedAt"
-       FROM linelist_uploads WHERE job_no = $1 AND is_latest ORDER BY id DESC LIMIT 1`,
-      [jobNo]
-    ),
-  ]);
-  const found = new Set(pids.map((p) => p.pidName));
+async function latestLineList(jobNo) {
+  const { rows } = await queryEpulse(
+    `SELECT id AS "uploadId", rev_no AS "revNo", uploaded_at AS "uploadedAt"
+     FROM linelist_uploads WHERE job_no = $1 AND is_latest ORDER BY id DESC LIMIT 1`,
+    [jobNo]
+  );
+  return rows[0] || null;
+}
+
+// The line data plus WHICH revisions it came from: the folder's pinned
+// revision of each P&ID (P&IDs named by the line list but not in the folder
+// have none) and the job's latest line-list upload revision.
+function basisOf(line, scope, lineList) {
+  const names = String(line.pidNo || '').split(',').map((s) => s.trim()).filter(Boolean).sort();
   return {
     ...Object.fromEntries(Object.keys(BASIS_FIELDS).map((k) => [k, line[k] ?? null])),
     lsrNo: line.lsrNo, sublineNo: line.sublineNo, service: line.service, unitNo: line.unitNo,
     dataMismatch: line.dataMismatch || null,
-    // P&IDs the line list names but that aren't uploaded yet have no revision
-    pids: [...pids, ...names.filter((n) => !found.has(n)).map((n) => ({ pidName: n, rev: null, documentId: null }))],
-    lineList: ll[0] || null,
+    pids: names.map((n) => {
+      const p = scope.pinned.get(n);
+      return p ? { pidName: n, rev: p.rev, documentId: p.documentId } : { pidName: n, rev: null, documentId: null, notInFolder: true };
+    }),
+    lineList,
   };
 }
 
-// Same as getBasis for many lines of one job (reports): two queries in all
-async function getBasisBulk(jobNo, lines) {
-  const namesOf = (l) => String((l && l.pidNo) || '').split(',').map((s) => s.trim()).filter(Boolean);
-  const allNames = [...new Set(lines.flatMap(namesOf))];
-  const [{ rows: pids }, { rows: ll }] = await Promise.all([
-    allNames.length
-      ? queryEpulse(
-        `SELECT mi.pid_name AS "pidName", d.rev_label AS rev, d.id AS "documentId"
-         FROM pid_master_index mi JOIN pid_documents d ON d.master_index_id = mi.id AND d.status = 'current'
-         WHERE mi.job_no = $1 AND mi.pid_name = ANY($2)`,
-        [jobNo, allNames])
-      : { rows: [] },
-    queryEpulse(
-      `SELECT id AS "uploadId", rev_no AS "revNo", uploaded_at AS "uploadedAt"
-       FROM linelist_uploads WHERE job_no = $1 AND is_latest ORDER BY id DESC LIMIT 1`,
-      [jobNo]
-    ),
-  ]);
-  const byName = new Map(pids.map((p) => [p.pidName, p]));
-  return lines.map((line) => (line ? {
-    ...Object.fromEntries(Object.keys(BASIS_FIELDS).map((k) => [k, line[k] ?? null])),
-    lsrNo: line.lsrNo, sublineNo: line.sublineNo, service: line.service, unitNo: line.unitNo,
-    dataMismatch: line.dataMismatch || null,
-    pids: namesOf(line).sort().map((n) => byName.get(n) || { pidName: n, rev: null, documentId: null }),
-    lineList: ll[0] || null,
-  } : null));
+async function getBasis(jobNo, line, scope) {
+  return basisOf(line, scope, await latestLineList(jobNo));
+}
+
+async function getBasisBulk(jobNo, lines, scope) {
+  const ll = await latestLineList(jobNo);
+  return lines.map((line) => (line ? basisOf(line, scope, ll) : null));
 }
 
 // What changed between a saved basis and now — [{ field, label, was, now }]
@@ -225,7 +222,7 @@ function compareBasis(saved, now) {
   const was = rev(saved.pids), cur = rev(now.pids);
   for (const name of new Set([...was.keys(), ...cur.keys()])) {
     if (was.get(name) !== cur.get(name)) {
-      out.push({ field: 'pid', label: `P&ID ${name}`, was: was.has(name) ? `Rev ${was.get(name) ?? '— (not uploaded)'}` : '—', now: cur.has(name) ? `Rev ${cur.get(name) ?? '— (not uploaded)'}` : '—' });
+      out.push({ field: 'pid', label: `P&ID ${name}`, was: was.has(name) ? `Rev ${was.get(name) ?? '— (not in folder)'}` : '—', now: cur.has(name) ? `Rev ${cur.get(name) ?? '— (not in folder)'}` : '—' });
     }
   }
   const llRev = (b) => (b && b.lineList ? b.lineList.revNo : null);
@@ -233,4 +230,7 @@ function compareBasis(saved, now) {
   return out;
 }
 
-module.exports = { getServices, getLsrNos, getSublines, getLineData, getLineDataBulk, getBasis, getBasisBulk, compareBasis, BASIS_FIELDS };
+module.exports = {
+  getServices, getLsrNos, getSublines, getLineKeys, getLineData, getLineDataBulk,
+  getBasis, getBasisBulk, compareBasis, BASIS_FIELDS,
+};

@@ -39,22 +39,37 @@ async function getCurrentDocument(masterIndexId) {
   return rows[0] || null;
 }
 
-// Which P&ID sheet a line is drawn on. First choice: a current drawing the
-// line was actually read off (pid_extracted_lines). Otherwise the P&ID no(s).
-// the line list gives for it (may be "A, B"). Any job's unit — a unit-101
-// line can sit on a P&ID filed under another unit.
-async function findForLine(jobNo, unitNo, service, seqNo) {
+// One drawing REVISION (ePULSE pid_documents.id), current or superseded —
+// a frozen MTO folder keeps the revision it was frozen with. isCurrent tells
+// whether ePULSE has a newer one since.
+async function getRevision(documentId) {
   const { rows } = await queryEpulse(
-    `SELECT ${MASTER_INDEX_COLUMNS}, ${DOCUMENT_COLUMNS} ${CURRENT_SHEETS}
-     JOIN pid_extracted_lines e ON e.document_id = d.id
-     WHERE mi.job_no = $1 AND mi.status = 'active'
-       AND e.unit_no = $2 AND e.service = $3
-       AND e.seq_no || coalesce('-' || e.sub_line, '') = $4   -- sub-lines are listed as "05341-01"
-     ORDER BY mi.pid_name
-     LIMIT 1`,
-    [jobNo, unitNo, service, seqNo]
+    `SELECT ${MASTER_INDEX_COLUMNS}, ${DOCUMENT_COLUMNS}, d.status = 'current' AS "isCurrent",
+            (SELECT c.rev_label FROM pid_documents c WHERE c.master_index_id = mi.id AND c.status = 'current' LIMIT 1) AS "currentRevLabel",
+            (SELECT c.id FROM pid_documents c WHERE c.master_index_id = mi.id AND c.status = 'current' LIMIT 1) AS "currentDocumentId"
+     FROM pid_documents d JOIN pid_master_index mi ON mi.id = d.master_index_id
+     WHERE d.id = $1`,
+    [Number(documentId) || 0]
   );
-  if (rows[0]) return rows[0];
+  return rows[0] || null;
+}
+
+// Which of an MTO folder's pinned drawings a line is on. First choice: a
+// pinned revision the line was actually read off (pid_extracted_lines).
+// Otherwise the P&ID no(s). the line list gives for it (may be "A, B"),
+// if the folder holds them.
+async function findForLine(jobNo, unitNo, scope, service, seqNo) {
+  if (!scope.docIds.length) return null;
+  const { rows } = await queryEpulse(
+    `SELECT DISTINCT e.document_id AS id, m.pid_name FROM pid_extracted_lines e
+     JOIN pid_master_index m ON m.id = e.master_index_id
+     WHERE e.document_id = ANY($3::int[]) AND m.job_no = $1
+       AND e.unit_no = $2 AND e.service = $4
+       AND e.seq_no || coalesce('-' || e.sub_line, '') = $5   -- sub-lines are listed as "05341-01"
+     ORDER BY m.pid_name LIMIT 1`,
+    [jobNo, unitNo, scope.docIds, service, seqNo]
+  );
+  if (rows[0]) return getRevision(rows[0].id);
 
   const { rows: ll } = await queryEpulse(
     `SELECT pid_no FROM line_list
@@ -64,16 +79,11 @@ async function findForLine(jobNo, unitNo, service, seqNo) {
     [jobNo, unitNo, service, seqNo]
   );
   const names = String(ll[0]?.pid_no || '').split(',').map((s) => s.trim()).filter(Boolean);
-  if (!names.length) return null;
-
-  const { rows: docs } = await queryEpulse(
-    `SELECT ${MASTER_INDEX_COLUMNS}, ${DOCUMENT_COLUMNS} ${CURRENT_SHEETS}
-     WHERE mi.job_no = $1 AND mi.status = 'active' AND mi.pid_name = ANY($2)
-     ORDER BY array_position($2::text[], mi.pid_name::text)
-     LIMIT 1`,
-    [jobNo, names]
-  );
-  return docs[0] || null;
+  for (const n of names) {
+    const hit = [...scope.pinned.keys()].find((p) => p === n || p.includes(n) || n.includes(p));
+    if (hit) return getRevision(scope.pinned.get(hit).documentId);
+  }
+  return null;
 }
 
-module.exports = { listAvailable, getCurrentDocument, findForLine };
+module.exports = { listAvailable, getCurrentDocument, getRevision, findForLine };

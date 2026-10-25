@@ -61,11 +61,13 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   try {
     await populateUnits();
+    await populateFolders();
     allLines = await loadAllLines();
     await Promise.all([inputCtrl.populateServices(), dumpCtrl.populateServices()]);
   } catch (err) {
     showToast('error', 'Could not load lines', err.message);
   }
+  document.getElementById('folderSelect').addEventListener('change', (e) => switchFolder(Number(e.target.value) || null));
 
   switchSection('summary');
   setInterval(updateClock, 1000);
@@ -129,6 +131,7 @@ async function switchUnit(unitNo) {
   if (activeSection === 'team') loadTeam();
   if (activeSection === 'mto' && activeTab === 'pid') showPidFolders();   // folders are per job + unit
   try {
+    await populateFolders();
     allLines = await loadAllLines();
     await Promise.all([inputCtrl.resetForUnit(), dumpCtrl.resetForUnit()]);
     renderSummaryTable();
@@ -139,6 +142,45 @@ async function switchUnit(unitNo) {
   }
 }
 
+
+/* ══════════════ MTO FOLDER (frozen set of P&ID revisions MTO is taken on) ══════════════ */
+let mtoFolders = [];   // frozen folders of the unit
+
+const currentFolder = () => mtoFolders.find(f => f.id === DataStore.getFolder()) || null;
+const folderLabel = () => { const f = currentFolder(); return f ? f.name : 'no MTO folder'; };
+
+async function populateFolders() {
+  let all = [];
+  try { all = await DataStore.getPidFolders(); } catch (err) { /* shown as "no folder" */ }
+  mtoFolders = all.filter(f => f.status === 'frozen')
+    .sort((a, b) => String(b.frozenAt).localeCompare(String(a.frozenAt)));   // newest first
+  if (!currentFolder()) DataStore.setFolder(mtoFolders.length ? mtoFolders[0].id : null);
+  const sel = document.getElementById('folderSelect');
+  sel.innerHTML = mtoFolders.length
+    ? mtoFolders.map(f => `<option value="${f.id}">${escAttr(f.name)} (${f.documentCount} P&amp;IDs)</option>`).join('')
+    : '<option value="">None frozen yet</option>';
+  sel.value = DataStore.getFolder() || '';
+  sel.disabled = mtoFolders.length < 2;
+}
+
+async function switchFolder(folderId) {
+  if ((inputCtrl.hasUnsavedChanges || dumpCtrl.hasUnsavedChanges) &&
+      !confirm('You have unsaved changes. Switch MTO folder and discard them?')) {
+    document.getElementById('folderSelect').value = DataStore.getFolder() || '';
+    return;
+  }
+  DataStore.setFolder(folderId);
+  try {
+    allLines = await loadAllLines();
+    await Promise.all([inputCtrl.resetForUnit(), dumpCtrl.resetForUnit()]);
+    renderSummaryTable();
+    if (activeSection === 'summary') loadMtoProgress();
+    if (activeSection === 'reports') switchSection('reports');
+    showToast('success', `MTO folder ${folderLabel()}`, "Lines come from this folder's P&ID revisions");
+  } catch (err) {
+    showToast('error', 'Could not switch MTO folder', err.message);
+  }
+}
 
 function updateClock() {
   document.getElementById('timeStat').textContent =
@@ -252,7 +294,7 @@ function switchSection(section) {
     loadTeam();
   } else if (section === 'reports') {
     document.getElementById('reportsScope').textContent =
-      `${currentUser.jobNo || ''} · Unit ${DataStore.getUnit() || '—'}`;
+      `${currentUser.jobNo || ''} · Unit ${DataStore.getUnit() || '—'} · MTO folder ${folderLabel()}`;
   }
 }
 
@@ -275,6 +317,10 @@ function switchTab(tab) {
 /* ══════════════ MTO PROGRESS: ePULSE zone plan vs IPMCS MTO taken ══════════════ */
 async function loadMtoProgress() {
   const box = document.getElementById('mtoProgress');
+  if (!DataStore.getFolder()) {
+    box.innerHTML = `<div class="mp-note">No frozen MTO folder in this unit yet. The Material Lead builds one in <b>MTO → P&amp;ID</b> (New Folder → Select P&amp;IDs → Freeze); MTO progress then shows here.</div>`;
+    return;
+  }
   try {
     renderMtoProgress(await DataStore.getMtoSummary());
   } catch (err) {
@@ -291,7 +337,7 @@ function renderMtoProgress(s) {
 
   const linesCard = s.hasPlan ? `
     <div class="mp-card">
-      <div class="mp-title">Lines — MTO progress</div>
+      <div class="mp-title">Lines — MTO progress · ${escAttr(s.folder.name)} (${s.folder.pids} P&amp;IDs)</div>
       <div class="mp-stats">
         ${stat('Lines in zone plan', L.planned)}
         ${stat('MTO taken', L.started, 'ok')}
@@ -299,12 +345,12 @@ function renderMtoProgress(s) {
         ${stat('Left', L.left, L.left ? 'warn' : '')}
       </div>
       <div class="mp-bar"><span style="width:${pct(L.started, L.planned)}%"></span></div>
-      <div class="mp-note">${pct(L.started, L.planned)}% of planned lines started · line list + P&amp;IDs have ${L.inSources} lines${L.inSources > L.planned ? ` — ${L.inSources - L.planned} not in the zone plan yet` : ''}</div>
+      <div class="mp-note">${pct(L.started, L.planned)}% of planned lines started · the folder's P&amp;IDs have ${L.inSources} lines${L.inSources > L.planned ? ` — ${L.inSources - L.planned} not in the zone plan yet` : ''}</div>
     </div>` : `
     <div class="mp-card">
-      <div class="mp-title">Lines — MTO progress</div>
+      <div class="mp-title">Lines — MTO progress · ${escAttr(s.folder.name)} (${s.folder.pids} P&amp;IDs)</div>
       <div class="mp-stats">
-        ${stat('Lines in line list + P&amp;IDs', L.inSources)}
+        ${stat("Lines on the folder's P&amp;IDs", L.inSources)}
         ${stat('Lines in zone plan', 0, 'warn')}
       </div>
       <div class="mp-note">No zone plan for this unit (${escAttr(unit || '')}) in ePULSE yet. Allocate zones in
@@ -477,7 +523,7 @@ let linesAll = [], linesCtrl = null;
 
 async function openLinesModal(ctrl) {
   linesCtrl = ctrl;
-  document.getElementById('linesTitle').textContent = `Lines — MTO taken · ${currentUser.jobNo || ''} · Unit ${DataStore.getUnit() || '—'}`;
+  document.getElementById('linesTitle').textContent = `Lines — MTO taken · ${currentUser.jobNo || ''} · Unit ${DataStore.getUnit() || '—'} · ${folderLabel()}`;
   document.getElementById('linesTbody').innerHTML = '<tr><td colspan="15" style="padding:14px;color:var(--text-faint)">Loading…</td></tr>';
   document.getElementById('linesModal').classList.add('open');
   try {
@@ -636,6 +682,7 @@ function escAttr(v) {
 
 // Saved zones of the unit, flattened for the summary table / navigation
 async function loadAllLines() {
+  if (!DataStore.getFolder()) return [];
   const zones = await DataStore.getLineZones();
   return zones.map(z => ({
     ...z,
@@ -672,7 +719,7 @@ function createMtoController(cfg) {
   const sublineValue = () => (byId('li_subline').value === SUBLINE_NONE ? '' : byId('li_subline').value);
 
   async function populateServices() {
-    fillSelect(byId('li_service'), await DataStore.getServices(), 'Select…');
+    fillSelect(byId('li_service'), DataStore.getFolder() ? await DataStore.getServices() : [], 'Select…');
   }
 
   function revertTo(selectName, value) { byId(selectName).value = value ?? ''; }
@@ -1222,7 +1269,7 @@ function createMtoController(cfg) {
     const d = state.lineData;
     try {
       const doc = await DataStore.getPidDocumentForLine(d.service, d.lsrNo, d.sublineNo);
-      const qs = new URLSearchParams({ doc: doc.masterIndexId, lineNo: d.lineNo });
+      const qs = new URLSearchParams({ doc: doc.documentId, lineNo: d.lineNo });   // the folder's pinned revision
       if (state.zone) qs.set('zone', state.zone);
       window.open(`pid-viewer.html?${qs}`, 'ipmcs_pid_viewer_' + cfg.key, 'width=1100,height=800');
     } catch (err) {
@@ -1412,6 +1459,7 @@ function initPidLibrary() {
 
   document.getElementById('pidNewFolderBtn').addEventListener('click', openPidFolderModal);
   document.getElementById('pidSelectBtn').addEventListener('click', openPidSelectModal);
+  document.getElementById('pidFreezeBtn').addEventListener('click', freezePidFolder);
   document.getElementById('pidBackToFoldersBtn').addEventListener('click', showPidFolders);
   document.getElementById('pidBackToDocsBtn').addEventListener('click', () => openPidFolder(pidActiveFolder));
   document.getElementById('pidRefreshBtn').addEventListener('click', () => openPidDocument(pidActiveDoc));
@@ -1456,9 +1504,9 @@ async function showPidFolders() {
   }
   grid.innerHTML = pidFolders.map(f => `
     <div class="pid-card" data-folder-id="${f.id}">
-      <i class="ti ti-folder pid-card-icon"></i>
-      <div class="pid-card-title">${f.name}</div>
-      <div class="pid-card-sub">${f.documentCount} P&amp;ID${f.documentCount === 1 ? '' : 's'}</div>
+      <i class="ti ${f.status === 'frozen' ? 'ti-folder-check' : 'ti-folder'} pid-card-icon"></i>
+      <div class="pid-card-title">${escAttr(f.name)}</div>
+      <div class="pid-card-sub">${f.documentCount} P&amp;ID${f.documentCount === 1 ? '' : 's'} · ${folderStatusText(f)}</div>
     </div>
   `).join('');
   grid.querySelectorAll('.pid-card').forEach(card => {
@@ -1469,12 +1517,23 @@ async function showPidFolders() {
   });
 }
 
+function folderStatusText(f) {
+  return f.status === 'frozen'
+    ? `Frozen${f.frozenBy ? ' by ' + escAttr(f.frozenBy) : ''}${f.frozenAt ? ' on ' + new Date(f.frozenAt).toLocaleDateString('en-IN') : ''}`
+    : 'Open — not frozen yet';
+}
+
 async function openPidFolder(folder) {
   pidActiveFolder = folder;
   pidView('pidDocumentsView');
-  const isAdmin = canManage();   // Lead or Material Lead of the unit
+  // Lead or Material Lead of the unit edit the P&ID list — only until it's frozen
+  const isAdmin = canManage() && folder.status !== 'frozen';
   document.getElementById('pidSelectBtn').style.display = isAdmin ? 'inline-flex' : 'none';
+  document.getElementById('pidFreezeBtn').style.display = isAdmin ? 'inline-flex' : 'none';
   document.getElementById('pidFolderTitle').textContent = folder.name;
+  const badge = document.getElementById('pidFolderStatusBadge');
+  badge.className = 'badge ' + (folder.status === 'frozen' ? 'badge-success' : 'badge-accent');
+  badge.innerHTML = folder.status === 'frozen' ? '<i class="ti ti-lock"></i>' + folderStatusText(folder) : 'Open — freeze to start MTO';
 
   try {
     pidDocs = await DataStore.getPidDocuments(folder.id);
@@ -1495,8 +1554,9 @@ function renderPidDocGrid(isAdmin) {
   grid.innerHTML = pidDocs.map(d => `
     <div class="pid-card" data-master-index-id="${d.masterIndexId}">
       <i class="ti ti-file-type-pdf pid-card-icon"></i>
-      <div class="pid-card-title">${d.pidName}</div>
-      <div class="pid-card-sub">Rev ${d.revLabel || '—'} · ${d.uploadedBy || 'Unknown'} · ${new Date(d.uploadedAt).toLocaleDateString('en-IN')}</div>
+      <div class="pid-card-title">${escAttr(d.pidName)}</div>
+      <div class="pid-card-sub">Rev ${escAttr(d.revLabel || '—')} · ${escAttr(d.uploadedBy || 'Unknown')} · ${new Date(d.uploadedAt).toLocaleDateString('en-IN')}</div>
+      ${d.newerRev ? `<div class="pid-card-sub pid-newer-rev" title="ePULSE has a newer revision — it goes into the next MTO folder">⚠ Rev ${escAttr(d.newerRev)} available</div>` : ''}
     </div>
   `).join('');
   grid.querySelectorAll('.pid-card').forEach(card => {
@@ -1512,13 +1572,13 @@ async function openPidDocument(doc) {
   pidStatusPageNum = 1;
   pidStatusScale = 1.25;
   pidView('pidStatusView');
-  document.getElementById('pidDocTitle').textContent = doc.pidName;
+  document.getElementById('pidDocTitle').textContent = `${doc.pidName} · Rev ${doc.revLabel || '—'}`;
   document.getElementById('pidStatusLoading').classList.remove('hidden');
   document.getElementById('pidStatusLoading').innerHTML =
     `<i class="ti ti-loader-2 pdf-spin"></i><span>Loading P&ID…</span>`;
 
   try {
-    const url = DataStore.pidFileUrl(doc.masterIndexId);
+    const url = DataStore.pidFileUrl(doc.documentId);   // the pinned revision
     pidStatusPdfDoc = await pdfjsLib.getDocument({ url, httpHeaders: DataStore.authHeaders() }).promise;
     document.getElementById('pidStatusLoading').classList.add('hidden');
     await renderPidStatusPage();
@@ -1548,8 +1608,8 @@ async function renderPidStatusPage() {
   let zoneBreaks = [];
   try {
     [byUser, zoneBreaks] = await Promise.all([
-      DataStore.getDocumentHighlights(pidActiveDoc.masterIndexId, pidStatusPageNum),
-      DataStore.getPidZoneBreaks(pidActiveDoc.masterIndexId, pidStatusPageNum),
+      DataStore.getDocumentHighlights(pidActiveDoc.documentId, pidStatusPageNum),
+      DataStore.getPidZoneBreaks(pidActiveDoc.documentId, pidStatusPageNum),
     ]);
   } catch (err) {
     showToast('error', 'Could not load highlight status', err.message);
@@ -1743,6 +1803,23 @@ async function openPidSelectModal() {
     list.innerHTML = `<div class="pid-empty-hint">Could not load PIMS P&amp;IDs: ${err.message}</div>`;
   }
 }
+async function freezePidFolder() {
+  const f = pidActiveFolder;
+  if (!pidDocs.length) { showToast('error', 'Nothing to freeze', 'Select at least one P&ID first'); return; }
+  if (!confirm(`Freeze MTO folder "${f.name}" with ${pidDocs.length} P&ID(s) at their current revisions?\n\nAfter freezing its P&IDs can't be added, removed or moved to a newer revision — newer revisions go into the next MTO folder. Job engineers can then take MTO in it.`)) return;
+  try {
+    const frozen = await DataStore.freezePidFolder(f.id);
+    showToast('success', `${f.name} frozen`, 'MTO can now be taken in this folder');
+    const before = DataStore.getFolder();
+    await populateFolders();
+    // the unit's first frozen folder: start working in it straight away
+    if (DataStore.getFolder() !== before) await switchFolder(DataStore.getFolder());
+    openPidFolder(frozen);
+  } catch (err) {
+    showToast('error', 'Could not freeze', err.message);
+  }
+}
+
 function closePidSelectModal() {
   document.getElementById('pidSelectDocModal').classList.remove('open');
 }

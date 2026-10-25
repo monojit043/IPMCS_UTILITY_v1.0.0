@@ -61,7 +61,13 @@ const DataStore = (() => {
     // The unit being worked in (Unit dropdown) — checked on the server
     // against the user's PC-2 units for the session's job
     const unit = sessionStorage.getItem('ipmcs_unit');
-    return { Authorization: 'Bearer ' + token, ...(unit ? { 'X-Unit-No': unit } : {}) };
+    // ...and the frozen MTO folder MTO is being taken in (MTO folder dropdown)
+    const folder = sessionStorage.getItem('ipmcs_folder');
+    return {
+      Authorization: 'Bearer ' + token,
+      ...(unit ? { 'X-Unit-No': unit } : {}),
+      ...(folder ? { 'X-Folder-Id': folder } : {}),
+    };
   }
 
   async function apiFetch(path, options = {}) {
@@ -171,11 +177,20 @@ const DataStore = (() => {
   function setUnit(unitNo) {
     sessionStorage.setItem('ipmcs_unit', unitNo);
   }
+  // The frozen MTO folder being worked in (its id), per browser tab
+  function getFolder() {
+    return Number(sessionStorage.getItem('ipmcs_folder')) || null;
+  }
+  function setFolder(folderId) {
+    if (folderId) sessionStorage.setItem('ipmcs_folder', String(folderId));
+    else sessionStorage.removeItem('ipmcs_folder');
+  }
 
   function clearSession() {
     sessionStorage.removeItem('ipmcs_token');
     sessionStorage.removeItem('ipmcs_user');
     sessionStorage.removeItem('ipmcs_unit');
+    sessionStorage.removeItem('ipmcs_folder');
     clearPendingAssignment();
   }
 
@@ -277,28 +292,33 @@ const DataStore = (() => {
   function removePidFolderSelection(folderId, masterIndexId) {
     return apiFetch(`/pid/folders/${folderId}/selections/${masterIndexId}`, { method: 'DELETE' });
   }
-  function getPidDocument(masterIndexId) {
-    return apiFetch(`/pid/documents/${masterIndexId}`);
+  // Freeze: the folder's P&IDs and their pinned revisions no longer change
+  function freezePidFolder(folderId) {
+    return apiFetch(`/pid/folders/${folderId}/freeze`, { method: 'POST' });
   }
-  // Resolves the P&ID sheet a given line is actually drawn on.
+  // One drawing REVISION (ePULSE pid_documents.id) — the one pinned in a folder
+  function getPidDocument(revId) {
+    return apiFetch(`/pid/revisions/${revId}`);
+  }
+  // The drawing a line is on, among the current MTO folder's pinned revisions
   function getPidDocumentForLine(service, lsr, subline) {
     return apiFetch('/pid/line-document' + qs({ service, lsr, subline: subline || '' }));
   }
-  function pidFileUrl(masterIndexId) {
-    return `${API_BASE}/pid/pims-file/${masterIndexId}`;
+  function pidFileUrl(revId) {
+    return `${API_BASE}/pid/revisions/${revId}/file`;
   }
 
-  /* ── P&ID highlighter annotations, per document (PIMS master index id) +
-     page + user ── */
+  /* ── P&ID highlighter annotations, per drawing revision (ePULSE
+     pid_documents.id) + page + user ── */
   function getDocumentHighlights(docId, page) {
-    return apiFetch(`/pid/documents/${docId}/highlights` + qs({ page }));
+    return apiFetch(`/pid/revisions/${docId}/highlights` + qs({ page }));
   }
   async function getMyPidHighlights(docId, page) {
-    const { strokes } = await apiFetch(`/pid/documents/${docId}/highlights/mine` + qs({ page }));
+    const { strokes } = await apiFetch(`/pid/revisions/${docId}/highlights/mine` + qs({ page }));
     return strokes;
   }
   async function setMyPidHighlights(docId, page, strokes) {
-    const res = await apiFetch(`/pid/documents/${docId}/highlights/mine` + qs({ page }), {
+    const res = await apiFetch(`/pid/revisions/${docId}/highlights/mine` + qs({ page }), {
       method: 'PUT',
       body: JSON.stringify({ strokes }),
     });
@@ -306,15 +326,15 @@ const DataStore = (() => {
   }
   // Auto-detected junctions where two different users' highlights touch.
   function getPidZoneBreaks(docId, page) {
-    return apiFetch(`/pid/documents/${docId}/zone-breaks` + qs({ page }));
+    return apiFetch(`/pid/revisions/${docId}/zone-breaks` + qs({ page }));
   }
 
   return {
-    login, ssoLogin, logout, selectAssignment, getSession, clearSession, getUnits, getUnit, setUnit, getPendingAssignment, clearPendingAssignment,
+    login, ssoLogin, logout, selectAssignment, getSession, clearSession, getUnits, getUnit, setUnit, getFolder, setFolder, getPendingAssignment, clearPendingAssignment,
     getServices, getLsrNos, getSublines, getLineData, getZones,
     getLineZones, getLineZone, saveLineZone, getMtoSummary, searchLineZones, deleteLineZone, getTeam, searchEmployees, assignTeamMember, removeTeamMember, getZoneRevisions, getZoneRevision,
     getPidFolders, createPidFolder, getPidDocuments,
-    getAvailablePimsDocuments, addPidFolderSelection, removePidFolderSelection,
+    getAvailablePimsDocuments, addPidFolderSelection, removePidFolderSelection, freezePidFolder,
     getPidDocument, getPidDocumentForLine, pidFileUrl, authHeaders,
     getDocumentHighlights, getMyPidHighlights, setMyPidHighlights, getPidZoneBreaks,
   };

@@ -1,6 +1,7 @@
 const express = require('express');
 const { requireAuth } = require('../middlewares/auth');
 const { applyUnit } = require('../middlewares/unit');
+const { requireFolder } = require('../middlewares/folder');
 
 const authRoutes = require('./auth.routes');
 const linesRoutes = require('./lines.routes');
@@ -15,10 +16,11 @@ router.use('/auth', authRoutes);
 
 // Everything below requires a valid login token; X-Unit-No (checked
 // against the user's PC-2 units) selects which unit is being worked in.
-router.use('/lines', requireAuth, applyUnit, linesRoutes);
-router.use('/line-zones', requireAuth, applyUnit, lineZonesRoutes);
+// MTO work happens inside one frozen MTO folder of the unit (X-Folder-Id)
+router.use('/lines', requireAuth, applyUnit, requireFolder(), linesRoutes);
+router.use('/line-zones', requireAuth, applyUnit, requireFolder(), lineZonesRoutes);
 router.use('/pid', requireAuth, applyUnit, pidRoutes);
-router.use('/reports', requireAuth, applyUnit, reportsRoutes);
+router.use('/reports', requireAuth, applyUnit, requireFolder(), reportsRoutes);
 router.use('/team', requireAuth, applyUnit, teamRoutes);
 
 module.exports = router;

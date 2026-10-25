@@ -29,6 +29,33 @@ async function run() {
       console.warn(`P&ID folder "${f.name}" (id ${f.id}) has ${scopes.length ? 'P&IDs of several job/units' : 'no P&IDs'} — left without a job/unit; it is not shown until fixed.`);
     }
   }
+  // Folders made before revisions were pinned: pin each P&ID at the revision
+  // that is current now (that is what was being worked on).
+  const pinCurrent = async (table, masterCol, docCol, revCol) => {
+    const { rows } = await query(`SELECT DISTINCT ${masterCol} AS mi FROM ${table} WHERE ${docCol} IS NULL`);
+    if (!rows.length) return;
+    const { rows: cur } = await queryEpulse(
+      `SELECT master_index_id AS mi, id, rev_label FROM pid_documents WHERE status = 'current' AND master_index_id = ANY($1)`,
+      [rows.map((r) => r.mi)]);
+    for (const c of cur) {
+      await query(`UPDATE ${table} SET ${docCol} = $2${revCol ? `, ${revCol} = $3` : ''} WHERE ${masterCol} = $1 AND ${docCol} IS NULL`,
+        revCol ? [c.mi, c.id, c.rev_label] : [c.mi, c.id]);
+    }
+    console.log(`${table}: pinned ${cur.length} P&ID(s) at their current revision`);
+  };
+  await pinCurrent('pid_folder_selections', 'pims_master_index_id', 'document_id', 'rev_label');
+  await pinCurrent('pid_user_highlights', 'document_id', 'revision_doc_id', null);
+  await pinCurrent('pid_zone_breaks', 'document_id', 'revision_doc_id', null);
+
+  // MTO saved before folders: into the unit's first folder (user's choice: MTO-1)
+  const { rows: loose2 } = await query(`SELECT DISTINCT job_no, unit_no FROM mto_line_zones WHERE folder_id IS NULL`);
+  for (const u of loose2) {
+    const { rows: [fold] } = await query(`SELECT id, name FROM pid_folders WHERE job_no = $1 AND unit_no = $2 ORDER BY created_at, id LIMIT 1`, [u.job_no, u.unit_no]);
+    if (!fold) { console.warn(`MTO of ${u.job_no} / ${u.unit_no} has no folder to go into — left unassigned (not shown)`); continue; }
+    const { rowCount } = await query(`UPDATE mto_line_zones SET folder_id = $3 WHERE job_no = $1 AND unit_no = $2 AND folder_id IS NULL`, [u.job_no, u.unit_no, fold.id]);
+    console.log(`${rowCount} line + zone(s) of ${u.job_no} / ${u.unit_no} moved into folder "${fold.name}"`);
+  }
+
   console.log('Done.');
   await Promise.all([pool.end(), epulsePool.end()]);
 }
