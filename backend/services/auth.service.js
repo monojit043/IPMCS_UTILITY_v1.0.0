@@ -27,10 +27,10 @@ async function getActiveEmployee(empId) {
   return rows[0] || null;
 }
 
-// ADMIN/JE is IPMCS-specific and lives in our own database. Anyone without
-// an explicit row here is treated as a plain JE.
+// ADMIN/JE is IPMCS-specific: IPMCS's own list (ipmcs_user_assignments).
+// Anyone without a row there is a plain JE.
 async function getIpmcsRole(empId) {
-  const { rows } = await query(`SELECT role FROM user_assignments WHERE upper(emp_id) = upper($1)`, [empId]);
+  const { rows } = await query(`SELECT role FROM ipmcs_user_assignments WHERE upper(emp_id) = upper($1)`, [empId]);
   return rows[0] ? rows[0].role : 'JE';
 }
 
@@ -72,19 +72,17 @@ function jobsFrom(assignments) {
   return [...byJob.values()];
 }
 
-async function upsertLocalUser(empId, name) {
-  const { rows } = await query(
-    `INSERT INTO users (emp_id, name) VALUES ($1,$2)
-     ON CONFLICT (emp_id) DO UPDATE SET name = EXCLUDED.name, updated_at = now()
-     RETURNING id`,
-    [empId, name]
-  );
-  return rows[0].id;
+// Names for a set of employee IDs, read live from PC-2 (nothing cached here)
+async function namesFor(empIds) {
+  const ids = [...new Set(empIds.filter(Boolean).map((e) => String(e).toUpperCase()))];
+  if (!ids.length) return new Map();
+  const { rows } = await queryEpulse(`SELECT upper(id) AS id, name FROM pc2_emp.users WHERE upper(id) = ANY($1)`, [ids]);
+  return new Map(rows.map((r) => [r.id, r.name]));
 }
 
-function generateToken({ id, empId, name, role, jobNo, unitNo, jobName }) {
+function generateToken({ empId, name, role, jobNo, unitNo, jobName }) {
   return jwt.sign(
-    { id, empId, name, role, jobNo: jobNo || null, unitNo: unitNo || null, jobName: jobName || null },
+    { empId, name, role, jobNo: jobNo || null, unitNo: unitNo || null, jobName: jobName || null },
     process.env.JWT_SECRET,
     { expiresIn: SESSION_EXPIRY }
   );
@@ -111,7 +109,7 @@ module.exports = {
   getAssignments,
   getUnitsForJob,
   jobsFrom,
-  upsertLocalUser,
+  namesFor,
   generateToken,
   generatePreAuthToken,
   verifyPreAuthToken,

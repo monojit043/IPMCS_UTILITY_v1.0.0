@@ -2,12 +2,12 @@ const HttpError = require('../middlewares/HttpError');
 const authService = require('../services/auth.service');
 const sso = require('../utils/sso');
 
+// Nothing about the user is stored in IPMCS — the token carries the employee ID
 async function finalizeLogin({ empId, name, role, jobNo, unitNo, jobName }) {
-  const id = await authService.upsertLocalUser(empId, name);
-  const token = authService.generateToken({ id, empId, name, role, jobNo, unitNo, jobName });
+  const token = authService.generateToken({ empId, name, role, jobNo, unitNo, jobName });
   return {
     token,
-    user: { id, empId, name, role, jobNo: jobNo || null, unitNo: unitNo || null, jobName: jobName || null },
+    user: { empId, name, role, jobNo: jobNo || null, unitNo: unitNo || null, jobName: jobName || null },
   };
 }
 

@@ -9,7 +9,7 @@ async function list(req, res) {
 async function create(req, res) {
   const name = (req.body.name || '').trim();
   if (!name) throw new HttpError(400, 'Folder name is required');
-  const folder = await foldersService.create(name, req.user.id);
+  const folder = await foldersService.create(name, req.user.empId);
   res.status(201).json(folder);
 }
 
@@ -26,7 +26,7 @@ async function addSelection(req, res) {
   if (!masterIndexId) throw new HttpError(400, 'masterIndexId is required');
   const doc = await pimsPid.getCurrentDocument(masterIndexId);
   if (!doc) throw new HttpError(404, 'No current PIMS document for that P&ID');
-  await foldersService.addSelection(req.params.folderId, masterIndexId, req.user.id);
+  await foldersService.addSelection(req.params.folderId, masterIndexId, req.user.empId);
   res.status(201).json(doc);
 }
 

@@ -11,8 +11,12 @@
 // Falls back to a per-user color only when a stroke has no zone at all
 // (highlighted from the general P&ID library, with no line context).
 const PID_USER_COLORS = ['#2f7dfa', '#22c58e', '#e8a33d', '#ef5b5b', '#a855f7', '#06b6d4', '#f472b6', '#84cc16'];
+// userId is the employee ID (e.g. A725) — a stable colour per person
 function pidColorForUser(userId) {
-  return PID_USER_COLORS[userId % PID_USER_COLORS.length];
+  const s = String(userId || '');
+  let hash = 0;
+  for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) % PID_USER_COLORS.length;
+  return PID_USER_COLORS[hash];
 }
 function pidColorForZone(zone) {
   if (!zone) return null;

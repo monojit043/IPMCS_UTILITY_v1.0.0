@@ -25,7 +25,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (lineZone) line = { zone: lineZone, lineNo: params.get('lineNo') || '' };
 
   const session = DataStore.getSession();
-  myUserId = session ? session.id : null;
+  myUserId = session ? session.empId : null;   // highlights are stored per employee ID
 
   pdfCanvas = document.getElementById('pdfCanvas');
   pdfCtx = pdfCanvas.getContext('2d');

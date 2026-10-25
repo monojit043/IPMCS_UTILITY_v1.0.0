@@ -10,13 +10,13 @@ async function getAll(req, res) {
 }
 
 async function getMine(req, res) {
-  res.json({ strokes: await highlightsService.getMine(req.params.id, pageOf(req), req.user.id) });
+  res.json({ strokes: await highlightsService.getMine(req.params.id, pageOf(req), req.user.empId) });
 }
 
 async function putMine(req, res) {
   const { strokes } = req.body;
   if (!Array.isArray(strokes)) throw new HttpError(400, 'strokes must be an array');
-  const result = await highlightsService.upsertMine(req.params.id, pageOf(req), req.user.id, strokes);
+  const result = await highlightsService.upsertMine(req.params.id, pageOf(req), req.user.empId, strokes);
   res.json({ strokes: result });
 }
 

@@ -5,18 +5,45 @@
 -- (line_list + lines read off current P&IDs) every time — see
 -- services/lineData.service.js.
 
--- Local identity cache only: names/passwords live on PC-2 (eil_employees).
--- Upserted on every login so pid_* tables have a stable local integer id.
-CREATE TABLE IF NOT EXISTS users (
-  id            SERIAL PRIMARY KEY,
-  emp_id        VARCHAR(50) UNIQUE NOT NULL,
-  name          VARCHAR(100) NOT NULL,
-  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+-- People are never copied into IPMCS: everyone is referred to by employee
+-- ID (e.g. A725); names are read live from PC-2 through ePULSE.
 
--- IPMCS-specific role per employee (ADMIN can manage the P&ID library;
--- everyone else is a Job Engineer). Employees with no row here are JE.
-CREATE TABLE IF NOT EXISTS user_assignments (
+-- One-time (2026-10-25): the old local `users` cache is gone and the Admin
+-- table was renamed. For a database still in the old shape, move the P&ID
+-- tables from users.id to employee IDs, then drop `users`.
+DO $$
+DECLARE r record;
+BEGIN
+  IF to_regclass('public.user_assignments') IS NOT NULL AND to_regclass('public.ipmcs_user_assignments') IS NULL THEN
+    ALTER TABLE user_assignments RENAME TO ipmcs_user_assignments;
+  END IF;
+  IF to_regclass('public.users') IS NOT NULL THEN
+    FOR r IN SELECT conrelid::regclass AS tbl, conname FROM pg_constraint
+             WHERE contype = 'f' AND confrelid = 'public.users'::regclass LOOP
+      EXECUTE format('ALTER TABLE %s DROP CONSTRAINT %I', r.tbl, r.conname);
+    END LOOP;
+    IF to_regclass('public.pid_folders') IS NOT NULL THEN
+      ALTER TABLE pid_folders ALTER COLUMN created_by TYPE VARCHAR(50) USING created_by::text;
+      UPDATE pid_folders f SET created_by = u.emp_id FROM users u WHERE f.created_by = u.id::text;
+      ALTER TABLE pid_folder_selections ALTER COLUMN added_by TYPE VARCHAR(50) USING added_by::text;
+      UPDATE pid_folder_selections s SET added_by = u.emp_id FROM users u WHERE s.added_by = u.id::text;
+      ALTER TABLE pid_user_highlights ALTER COLUMN user_id TYPE VARCHAR(50) USING user_id::text;
+      UPDATE pid_user_highlights h SET user_id = u.emp_id FROM users u WHERE h.user_id = u.id::text;
+      ALTER TABLE pid_user_highlights RENAME COLUMN user_id TO emp_id;
+      ALTER TABLE pid_zone_breaks ALTER COLUMN user_a_id TYPE VARCHAR(50) USING user_a_id::text,
+                                  ALTER COLUMN user_b_id TYPE VARCHAR(50) USING user_b_id::text;
+      UPDATE pid_zone_breaks z SET user_a_id = u.emp_id FROM users u WHERE z.user_a_id = u.id::text;
+      UPDATE pid_zone_breaks z SET user_b_id = u.emp_id FROM users u WHERE z.user_b_id = u.id::text;
+      ALTER TABLE pid_zone_breaks RENAME COLUMN user_a_id TO emp_a;
+      ALTER TABLE pid_zone_breaks RENAME COLUMN user_b_id TO emp_b;
+    END IF;
+    DROP TABLE users;
+  END IF;
+END $$;
+
+-- IPMCS's own Admin list (ADMIN may create P&ID folders and pick drawings
+-- into them) — not taken from PC-2 roles. Anyone without a row is a JE.
+CREATE TABLE IF NOT EXISTS ipmcs_user_assignments (
   id          SERIAL PRIMARY KEY,
   emp_id      VARCHAR(50) UNIQUE NOT NULL,
   role        VARCHAR(10) NOT NULL CHECK (role IN ('ADMIN','JE')),
@@ -148,7 +175,7 @@ CREATE INDEX IF NOT EXISTS idx_extracted_items_zone ON extracted_items (line_zon
 CREATE TABLE IF NOT EXISTS pid_folders (
   id          SERIAL PRIMARY KEY,
   name        VARCHAR(100) NOT NULL UNIQUE,
-  created_by  INTEGER REFERENCES users(id),
+  created_by  VARCHAR(50),          -- employee ID
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -158,7 +185,7 @@ CREATE TABLE IF NOT EXISTS pid_folder_selections (
   id                    SERIAL PRIMARY KEY,
   folder_id             INTEGER NOT NULL REFERENCES pid_folders(id) ON DELETE CASCADE,
   pims_master_index_id  INTEGER NOT NULL,
-  added_by              INTEGER REFERENCES users(id),
+  added_by              VARCHAR(50),   -- employee ID
   added_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (folder_id, pims_master_index_id)
 );
@@ -170,10 +197,10 @@ CREATE TABLE IF NOT EXISTS pid_user_highlights (
   id           SERIAL PRIMARY KEY,
   document_id  INTEGER NOT NULL,
   page_num     INTEGER NOT NULL DEFAULT 1,
-  user_id      INTEGER NOT NULL REFERENCES users(id),
+  emp_id       VARCHAR(50) NOT NULL,   -- whose strokes
   strokes      JSONB NOT NULL DEFAULT '[]',
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (document_id, page_num, user_id)
+  UNIQUE (document_id, page_num, emp_id)
 );
 
 -- Auto-detected junctions where two highlight strokes of different zones
@@ -185,8 +212,8 @@ CREATE TABLE IF NOT EXISTS pid_zone_breaks (
   page_num     INTEGER NOT NULL DEFAULT 1,
   x            NUMERIC NOT NULL,
   y            NUMERIC NOT NULL,
-  user_a_id    INTEGER NOT NULL REFERENCES users(id),
-  user_b_id    INTEGER NOT NULL REFERENCES users(id),
+  emp_a        VARCHAR(50) NOT NULL,   -- the two employees whose
+  emp_b        VARCHAR(50) NOT NULL,   -- highlights meet
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ALTER TABLE pid_zone_breaks ADD COLUMN IF NOT EXISTS zone_a VARCHAR(10);

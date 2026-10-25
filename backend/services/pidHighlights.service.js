@@ -1,4 +1,8 @@
 const { query } = require('../config/db');
+const { namesFor } = require('./auth.service');
+
+// People are identified by employee ID (userId below IS the employee ID, e.g.
+// A725); names are read live from PC-2.
 
 // PDF-space pixels (scale=1, same units strokes are stored in).
 const ZONE_BREAK_THRESHOLD = 20;
@@ -13,18 +17,18 @@ function normalizeStroke(stroke) {
 
 async function getAllForDocument(documentId, pageNum) {
   const { rows } = await query(
-    `SELECT h.user_id AS "userId", u.name AS "userName", u.emp_id AS "empId", h.strokes
-     FROM pid_user_highlights h JOIN users u ON u.id = h.user_id
-     WHERE h.document_id = $1 AND h.page_num = $2
-     ORDER BY u.name`,
+    `SELECT emp_id AS "userId", emp_id AS "empId", strokes
+     FROM pid_user_highlights WHERE document_id = $1 AND page_num = $2 ORDER BY emp_id`,
     [documentId, pageNum]
   );
-  return rows.filter((r) => r.strokes && r.strokes.length);
+  const withStrokes = rows.filter((r) => r.strokes && r.strokes.length);
+  const names = await namesFor(withStrokes.map((r) => r.empId));
+  return withStrokes.map((r) => ({ ...r, userName: names.get(r.empId.toUpperCase()) || r.empId }));
 }
 
 async function getMine(documentId, pageNum, userId) {
   const { rows } = await query(
-    `SELECT strokes FROM pid_user_highlights WHERE document_id = $1 AND page_num = $2 AND user_id = $3`,
+    `SELECT strokes FROM pid_user_highlights WHERE document_id = $1 AND page_num = $2 AND emp_id = $3`,
     [documentId, pageNum, userId]
   );
   return rows[0] ? rows[0].strokes : [];
@@ -34,9 +38,9 @@ async function upsertMine(documentId, pageNum, userId, strokes) {
   const previous = await getMine(documentId, pageNum, userId);
 
   await query(
-    `INSERT INTO pid_user_highlights (document_id, page_num, user_id, strokes, updated_at)
+    `INSERT INTO pid_user_highlights (document_id, page_num, emp_id, strokes, updated_at)
      VALUES ($1,$2,$3,$4,now())
-     ON CONFLICT (document_id, page_num, user_id) DO UPDATE SET strokes = $4, updated_at = now()`,
+     ON CONFLICT (document_id, page_num, emp_id) DO UPDATE SET strokes = $4, updated_at = now()`,
     [documentId, pageNum, userId, JSON.stringify(strokes)]
   );
 
@@ -65,8 +69,8 @@ async function detectZoneBreak(documentId, pageNum, userId, newStroke, myOtherSt
   const endpoints = [newStroke.points[0], newStroke.points[newStroke.points.length - 1]];
 
   const { rows: others } = await query(
-    `SELECT user_id AS "userId", strokes FROM pid_user_highlights
-     WHERE document_id = $1 AND page_num = $2 AND user_id != $3`,
+    `SELECT emp_id AS "userId", strokes FROM pid_user_highlights
+     WHERE document_id = $1 AND page_num = $2 AND emp_id != $3`,
     [documentId, pageNum, userId]
   );
 
@@ -99,7 +103,7 @@ async function recordZoneBreak(documentId, pageNum, point, userIdA, zoneA, userI
 
   const { rows: existing } = await query(
     `SELECT id, x, y FROM pid_zone_breaks
-     WHERE document_id = $1 AND page_num = $2 AND user_a_id = $3 AND user_b_id = $4`,
+     WHERE document_id = $1 AND page_num = $2 AND emp_a = $3 AND emp_b = $4`,
     [documentId, pageNum, userIdA, userIdB]
   );
   const nearby = existing.find((e) => distance([e.x, e.y], point) <= ZONE_BREAK_THRESHOLD * 2);
@@ -113,7 +117,7 @@ async function recordZoneBreak(documentId, pageNum, point, userIdA, zoneA, userI
   }
 
   await query(
-    `INSERT INTO pid_zone_breaks (document_id, page_num, x, y, user_a_id, user_b_id, zone_a, zone_b)
+    `INSERT INTO pid_zone_breaks (document_id, page_num, x, y, emp_a, emp_b, zone_a, zone_b)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
     [documentId, pageNum, point[0], point[1], userIdA, userIdB, zoneA, zoneB]
   );
@@ -121,18 +125,17 @@ async function recordZoneBreak(documentId, pageNum, point, userIdA, zoneA, userI
 
 async function getZoneBreaks(documentId, pageNum) {
   const { rows } = await query(
-    `SELECT zb.id, zb.x, zb.y, zb.user_a_id AS "userAId", zb.user_b_id AS "userBId",
-            zb.zone_a AS "zoneA", zb.zone_b AS "zoneB",
-            ua.name AS "userAName", ub.name AS "userBName",
-            ua.emp_id AS "userAEmpId", ub.emp_id AS "userBEmpId"
-     FROM pid_zone_breaks zb
-     JOIN users ua ON ua.id = zb.user_a_id
-     JOIN users ub ON ub.id = zb.user_b_id
-     WHERE zb.document_id = $1 AND zb.page_num = $2
-     ORDER BY zb.id`,
+    `SELECT id, x, y, emp_a AS "userAId", emp_b AS "userBId", emp_a AS "userAEmpId", emp_b AS "userBEmpId",
+            zone_a AS "zoneA", zone_b AS "zoneB"
+     FROM pid_zone_breaks WHERE document_id = $1 AND page_num = $2 ORDER BY id`,
     [documentId, pageNum]
   );
-  return rows;
+  const names = await namesFor(rows.flatMap((r) => [r.userAEmpId, r.userBEmpId]));
+  return rows.map((r) => ({
+    ...r,
+    userAName: names.get(r.userAEmpId.toUpperCase()) || r.userAEmpId,
+    userBName: names.get(r.userBEmpId.toUpperCase()) || r.userBEmpId,
+  }));
 }
 
 module.exports = { getAllForDocument, getMine, upsertMine, getZoneBreaks };
