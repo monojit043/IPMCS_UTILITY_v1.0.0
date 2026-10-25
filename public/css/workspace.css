@@ -400,3 +400,45 @@ input.inline-input:focus { border-color: var(--color-accent); box-shadow: 0 0 0 
 .rep-body { flex: 1; min-width: 0; }
 .rep-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
 .rep-desc { font-size: 11px; color: var(--text-muted); margin-top: 3px; line-height: 1.45; }
+
+/* ── MTO page layout tidy (2026-10-25) ── */
+/* toolbar: one row, wraps only on narrow screens; COSMAS "coming soon" under More ▾ */
+.mto-toolbar.mto-toolbar-one { height: auto; min-height: 34px; flex-wrap: wrap; padding: 4px 10px; row-gap: 4px; }
+.tb-sep { width: 1px; align-self: stretch; background: var(--color-border); margin: 2px 2px; }
+.more-wrap { position: relative; }
+.more-menu {
+  display: none; position: absolute; top: calc(100% + 4px); left: 0; z-index: 50; min-width: 230px;
+  background: var(--color-surface-alt); border: 1px solid var(--color-border-strong); border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0,0,0,.25); padding: 4px;
+}
+.more-wrap.open .more-menu { display: block; }
+.more-item {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 10px; border: 0; background: none;
+  border-radius: var(--radius-sm); color: var(--text-secondary); font-size: 12px; text-align: left; cursor: pointer;
+}
+.more-item:hover { background: var(--color-accent-soft); color: var(--text-primary); }
+.more-item::after { content: 'soon'; margin-left: auto; font-size: 9px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .05em; }
+
+/* line header: denser — 8 columns, lower boxes; collapsible to its title line */
+.line-info-panel { --cos-box-h: 25px; padding-top: 6px; padding-bottom: 6px; }
+.cos-fields { grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 3px 6px; }
+.li-fields .field, .cos-fields .field { gap: 1px; }
+.cos-collapse, .sppid-toggle {
+  border: 0; background: none; color: var(--text-muted); cursor: pointer; padding: 0 4px 0 0; font-size: 13px; line-height: 1;
+}
+.cos-collapse:hover, .sppid-toggle:hover { color: var(--color-accent-strong); }
+.cos-mini { display: none; margin-left: 10px; font-family: var(--font-mono); text-transform: none; letter-spacing: 0; color: var(--text-secondary); font-weight: 500; }
+.line-info-panel.cos-collapsed .cos-fields,
+.line-info-panel.cos-collapsed .li-col-select .li-col-title { display: none; }
+.line-info-panel.cos-collapsed .cos-mini { display: inline; }
+.line-info-panel.cos-collapsed .cos-collapse i { transform: rotate(180deg); }
+
+/* SPPID panel: narrow strip when collapsed (default while it has no data) */
+.entry-split { transition: grid-template-columns .15s ease; }
+.entry-split.sppid-collapsed { grid-template-columns: minmax(0, 1fr) 34px; }
+.entry-split.sppid-collapsed .extracted-col > :not(.col-head) { display: none; }
+.entry-split.sppid-collapsed .extracted-col .col-head {
+  writing-mode: vertical-rl; height: 100%; padding: 10px 0; justify-content: flex-start; align-items: center; gap: 8px;
+}
+.entry-split.sppid-collapsed .extracted-col .col-head span:nth-of-type(1) { flex: 0; }
+.entry-split.sppid-collapsed .sppid-toggle i { transform: rotate(180deg); }

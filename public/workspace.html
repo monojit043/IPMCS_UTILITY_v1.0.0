@@ -17,15 +17,6 @@
   <!-- TOP BAR -->
   <div class="topbar">
     <div class="tb-brand"><i class="ti ti-package"></i>IPMCS</div>
-    <div class="steps">
-      <div class="step done"><i class="ti ti-check"></i>Login</div>
-      <i class="ti ti-chevron-right step-arrow"></i>
-      <div class="step done"><i class="ti ti-check"></i>Select Line</div>
-      <i class="ti ti-chevron-right step-arrow"></i>
-      <div class="step active"><i class="ti ti-pencil"></i>Manual MTO</div>
-      <i class="ti ti-chevron-right step-arrow"></i>
-      <div class="step"><i class="ti ti-upload"></i>Model Upload</div>
-    </div>
     <div class="tb-right">
       <div class="project-pill" id="projectPillEl"><i class="ti ti-briefcase"></i>—</div>
       <button class="theme-toggle" title="Toggle light / dark theme">
@@ -227,7 +218,9 @@
                 <div class="li-divider"></div>
                 <div class="li-col li-col-cosmas">
                   <div class="li-col-title cos-title">
-                    <span>Bill of Material (AFC) · <span id="ld_status">LINE STATUS : —</span></span>
+                    <span><button class="cos-collapse" type="button" id="cosToggle" title="Hide / show the line details"><i class="ti ti-chevron-up"></i></button>
+                      Bill of Material (AFC) · <span id="ld_status">LINE STATUS : —</span>
+                      <span class="cos-mini" id="ld_mini"></span></span>
                     <span class="cos-key" id="ld_keyRow">Line Key for COSMAS
                       <span class="cos-key-formula" title="Contr_Code+service+unit+lsrno+subline+dwg.indicator+area no">ⓘ</span>:
                       <span class="ld-val" id="ld_lineKey">—</span></span>
@@ -283,7 +276,7 @@
                       <label class="field-label">Picked From</label>
                       <input type="text" id="ro_source" readonly tabindex="-1" title="From the line list / P&amp;ID — read-only"/>
                     </div>
-                    <div class="field cos-ro cos-span4">
+                    <div class="field cos-ro cos-span2">
                       <label class="field-label">P&amp;ID</label>
                       <input type="text" id="ro_pidNo" readonly tabindex="-1" title="From the line list / P&amp;ID — read-only"/>
                     </div>
@@ -351,29 +344,33 @@
 
                 <div class="entry-col">
                   <div class="col-head"><i class="ti ti-edit"></i><span>Bill of Material — Data Entry</span></div>
-                  <div class="mto-toolbar">
+                  <div class="mto-toolbar mto-toolbar-one">
                     <button class="btn btn-primary btn-sm" id="addItemBtn"><i class="ti ti-row-insert-bottom"></i>Insert</button>
                     <button class="btn btn-ghost btn-sm" id="dupItemBtn"><i class="ti ti-copy"></i>Duplicate</button>
                     <button class="btn btn-success btn-sm" id="saveBtn"><i class="ti ti-device-floppy"></i>Save</button>
                     <button class="btn btn-ghost btn-sm" id="deleteItemBtn"><i class="ti ti-row-remove"></i>Delete Line</button>
                     <button class="btn btn-ghost btn-sm" id="undoBtn"><i class="ti ti-arrow-back-up"></i>Undo</button>
+                    <span class="tb-sep"></span>
+                    <button class="btn btn-outline btn-sm" id="exportBtn" title="Export Line Data to Excel"><i class="ti ti-file-spreadsheet"></i>Export to Excel</button>
+                    <button class="btn btn-ghost btn-sm" id="historyBtn"><i class="ti ti-history"></i>View History</button>
+                    <button class="btn btn-ghost btn-sm" id="openPidBtn"><i class="ti ti-highlight"></i>Open &amp; Highlight P&amp;ID</button>
+                    <button class="btn btn-ghost btn-sm" id="uploadBtn"><i class="ti ti-upload"></i>Model Dump</button>
+                    <div class="more-wrap">
+                      <button class="btn btn-ghost btn-sm more-btn" type="button"><i class="ti ti-dots"></i>More<i class="ti ti-chevron-down"></i></button>
+                      <div class="more-menu">
+                        <button class="more-item cos-soon" data-label="Switch to BULK BoM"><i class="ti ti-switch-horizontal"></i>Switch to BULK BoM</button>
+                        <button class="more-item cos-soon" data-label="Search/Delete Lines/Print"><i class="ti ti-search"></i>Search/Delete Lines/Print</button>
+                        <button class="more-item cos-soon" data-label="MTO Process"><i class="ti ti-player-play"></i>MTO Process</button>
+                        <button class="more-item cos-soon" data-label="Update AFC Key"><i class="ti ti-key"></i>Update AFC Key</button>
+                        <button class="more-item cos-soon" data-label="Copy to BULK BoM"><i class="ti ti-copy"></i>Copy to BULK BoM</button>
+                        <button class="more-item cos-soon" data-label="Import Line Data From Excel"><i class="ti ti-file-import"></i>Import Line Data From Excel</button>
+                      </div>
+                    </div>
                     <div style="flex:1"></div>
                     <button class="btn btn-outline btn-sm" id="navFirstBtn" title="First line">&lt;&lt;</button>
                     <button class="btn btn-outline btn-sm" id="navPrevBtn" title="Previous line">&lt;</button>
                     <button class="btn btn-outline btn-sm" id="navNextBtn" title="Next line">&gt;</button>
                     <button class="btn btn-outline btn-sm" id="navLastBtn" title="Last line">&gt;&gt;</button>
-                  </div>
-                  <div class="mto-toolbar cos-actions">
-                    <button class="btn btn-ghost btn-sm cos-soon" data-label="Switch to BULK BoM"><i class="ti ti-switch-horizontal"></i>Switch to BULK BoM</button>
-                    <button class="btn btn-ghost btn-sm cos-soon" data-label="Search/Delete Lines/Print"><i class="ti ti-search"></i>Search/Delete Lines/Print</button>
-                    <button class="btn btn-ghost btn-sm cos-soon" data-label="MTO Process"><i class="ti ti-player-play"></i>MTO Process</button>
-                    <button class="btn btn-ghost btn-sm cos-soon" data-label="Update AFC Key"><i class="ti ti-key"></i>Update AFC Key</button>
-                    <button class="btn btn-ghost btn-sm cos-soon" data-label="Copy to BULK BoM"><i class="ti ti-copy"></i>Copy to BULK BoM</button>
-                    <button class="btn btn-outline btn-sm" id="exportBtn"><i class="ti ti-file-spreadsheet"></i>Export Line Data to Excel</button>
-                    <button class="btn btn-ghost btn-sm cos-soon" data-label="Import Line Data From Excel"><i class="ti ti-file-import"></i>Import Line Data From Excel</button>
-                    <button class="btn btn-ghost btn-sm" id="historyBtn"><i class="ti ti-history"></i>View History</button>
-                    <button class="btn btn-ghost btn-sm" id="openPidBtn"><i class="ti ti-highlight"></i>Open &amp; Highlight P&amp;ID</button>
-                    <button class="btn btn-ghost btn-sm" id="uploadBtn"><i class="ti ti-upload"></i>Model Dump</button>
                   </div>
 
                   <div class="empty-state" id="emptyState">
@@ -406,7 +403,7 @@
                 </div>
 
                 <div class="extracted-col">
-                  <div class="col-head"><i class="ti ti-topology-star"></i><span>SPPID Extracted Data</span><span class="badge badge-muted" id="extractedCountBadge">0 items</span></div>
+                  <div class="col-head"><button class="sppid-toggle" type="button" id="sppidToggle" title="Show / hide SPPID extracted data"><i class="ti ti-layout-sidebar-right-collapse"></i></button><i class="ti ti-topology-star"></i><span>SPPID Extracted Data</span><span class="badge badge-muted" id="extractedCountBadge">0 items</span></div>
 
                   <div class="empty-state" id="extractedEmptyState">
                     <i class="ti ti-topology-star empty-icon"></i>
@@ -470,7 +467,9 @@
                 <div class="li-divider"></div>
                 <div class="li-col li-col-cosmas">
                   <div class="li-col-title cos-title">
-                    <span>Bill of Material (AFC) · <span id="dc_ld_status">LINE STATUS : —</span></span>
+                    <span><button class="cos-collapse" type="button" id="dc_cosToggle" title="Hide / show the line details"><i class="ti ti-chevron-up"></i></button>
+                      Bill of Material (AFC) · <span id="dc_ld_status">LINE STATUS : —</span>
+                      <span class="cos-mini" id="dc_ld_mini"></span></span>
                     <span class="cos-key" id="dc_ld_keyRow">Line Key for COSMAS
                       <span class="cos-key-formula" title="Contr_Code+service+unit+lsrno+subline+dwg.indicator+area no">ⓘ</span>:
                       <span class="ld-val" id="dc_ld_lineKey">—</span></span>
@@ -526,7 +525,7 @@
                       <label class="field-label">Picked From</label>
                       <input type="text" id="dc_ro_source" readonly tabindex="-1" title="From the line list / P&amp;ID — read-only"/>
                     </div>
-                    <div class="field cos-ro cos-span4">
+                    <div class="field cos-ro cos-span2">
                       <label class="field-label">P&amp;ID</label>
                       <input type="text" id="dc_ro_pidNo" readonly tabindex="-1" title="From the line list / P&amp;ID — read-only"/>
                     </div>
@@ -594,29 +593,33 @@
 
                 <div class="entry-col">
                   <div class="col-head"><i class="ti ti-file-diff"></i><span>Bill of Material — Model Dump Data</span></div>
-                  <div class="mto-toolbar">
+                  <div class="mto-toolbar mto-toolbar-one">
                     <button class="btn btn-primary btn-sm" id="dc_addItemBtn"><i class="ti ti-row-insert-bottom"></i>Insert</button>
                     <button class="btn btn-ghost btn-sm" id="dc_dupItemBtn"><i class="ti ti-copy"></i>Duplicate</button>
                     <button class="btn btn-success btn-sm" id="dc_saveBtn"><i class="ti ti-device-floppy"></i>Save</button>
                     <button class="btn btn-ghost btn-sm" id="dc_deleteItemBtn"><i class="ti ti-row-remove"></i>Delete Line</button>
                     <button class="btn btn-ghost btn-sm" id="dc_undoBtn"><i class="ti ti-arrow-back-up"></i>Undo</button>
+                    <span class="tb-sep"></span>
+                    <button class="btn btn-outline btn-sm" id="dc_exportBtn" title="Export Line Data to Excel"><i class="ti ti-file-spreadsheet"></i>Export to Excel</button>
+                    <button class="btn btn-ghost btn-sm" id="dc_historyBtn"><i class="ti ti-history"></i>View History</button>
+                    <button class="btn btn-ghost btn-sm" id="dc_openPidBtn"><i class="ti ti-highlight"></i>Open &amp; Highlight P&amp;ID</button>
+                    <button class="btn btn-ghost btn-sm" id="dc_uploadBtn"><i class="ti ti-upload"></i>Model Dump</button>
+                    <div class="more-wrap">
+                      <button class="btn btn-ghost btn-sm more-btn" type="button"><i class="ti ti-dots"></i>More<i class="ti ti-chevron-down"></i></button>
+                      <div class="more-menu">
+                        <button class="more-item cos-soon" data-label="Switch to BULK BoM"><i class="ti ti-switch-horizontal"></i>Switch to BULK BoM</button>
+                        <button class="more-item cos-soon" data-label="Search/Delete Lines/Print"><i class="ti ti-search"></i>Search/Delete Lines/Print</button>
+                        <button class="more-item cos-soon" data-label="MTO Process"><i class="ti ti-player-play"></i>MTO Process</button>
+                        <button class="more-item cos-soon" data-label="Update AFC Key"><i class="ti ti-key"></i>Update AFC Key</button>
+                        <button class="more-item cos-soon" data-label="Copy to BULK BoM"><i class="ti ti-copy"></i>Copy to BULK BoM</button>
+                        <button class="more-item cos-soon" data-label="Import Line Data From Excel"><i class="ti ti-file-import"></i>Import Line Data From Excel</button>
+                      </div>
+                    </div>
                     <div style="flex:1"></div>
                     <button class="btn btn-outline btn-sm" id="dc_navFirstBtn" title="First line">&lt;&lt;</button>
                     <button class="btn btn-outline btn-sm" id="dc_navPrevBtn" title="Previous line">&lt;</button>
                     <button class="btn btn-outline btn-sm" id="dc_navNextBtn" title="Next line">&gt;</button>
                     <button class="btn btn-outline btn-sm" id="dc_navLastBtn" title="Last line">&gt;&gt;</button>
-                  </div>
-                  <div class="mto-toolbar cos-actions">
-                    <button class="btn btn-ghost btn-sm cos-soon" data-label="Switch to BULK BoM"><i class="ti ti-switch-horizontal"></i>Switch to BULK BoM</button>
-                    <button class="btn btn-ghost btn-sm cos-soon" data-label="Search/Delete Lines/Print"><i class="ti ti-search"></i>Search/Delete Lines/Print</button>
-                    <button class="btn btn-ghost btn-sm cos-soon" data-label="MTO Process"><i class="ti ti-player-play"></i>MTO Process</button>
-                    <button class="btn btn-ghost btn-sm cos-soon" data-label="Update AFC Key"><i class="ti ti-key"></i>Update AFC Key</button>
-                    <button class="btn btn-ghost btn-sm cos-soon" data-label="Copy to BULK BoM"><i class="ti ti-copy"></i>Copy to BULK BoM</button>
-                    <button class="btn btn-outline btn-sm" id="dc_exportBtn"><i class="ti ti-file-spreadsheet"></i>Export Line Data to Excel</button>
-                    <button class="btn btn-ghost btn-sm cos-soon" data-label="Import Line Data From Excel"><i class="ti ti-file-import"></i>Import Line Data From Excel</button>
-                    <button class="btn btn-ghost btn-sm" id="dc_historyBtn"><i class="ti ti-history"></i>View History</button>
-                    <button class="btn btn-ghost btn-sm" id="dc_openPidBtn"><i class="ti ti-highlight"></i>Open &amp; Highlight P&amp;ID</button>
-                    <button class="btn btn-ghost btn-sm" id="dc_uploadBtn"><i class="ti ti-upload"></i>Model Dump</button>
                   </div>
 
                   <div class="empty-state" id="dc_emptyState">
@@ -649,7 +652,7 @@
                 </div>
 
                 <div class="extracted-col">
-                  <div class="col-head"><i class="ti ti-topology-star"></i><span>SPPID Extracted Data</span><span class="badge badge-muted" id="dc_extractedCountBadge">0 items</span></div>
+                  <div class="col-head"><button class="sppid-toggle" type="button" id="dc_sppidToggle" title="Show / hide SPPID extracted data"><i class="ti ti-layout-sidebar-right-collapse"></i></button><i class="ti ti-topology-star"></i><span>SPPID Extracted Data</span><span class="badge badge-muted" id="dc_extractedCountBadge">0 items</span></div>
 
                   <div class="empty-state" id="dc_extractedEmptyState">
                     <i class="ti ti-topology-star empty-icon"></i>
@@ -762,8 +765,8 @@
       <!-- STATUS BAR -->
       <div class="statusbar">
         <div class="sb-stat"><span class="dot dot-success" style="width:5px;height:5px"></span>System Online</div>
-        <div class="sb-stat"><i class="ti ti-database" style="font-size:10px"></i>Mock data · no backend yet</div>
         <div class="sb-stat" id="selectedLineStat">No line selected</div>
+        <div class="sb-stat" id="lastSaveStat"></div>
         <div class="sb-r">
           <span id="roleStatEl">Role: —</span>
           <span id="jobUnitStatEl">—</span>

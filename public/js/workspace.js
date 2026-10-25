@@ -253,6 +253,8 @@ function switchTab(tab) {
   Object.values(TAB_PANELS).forEach(id => { document.getElementById(id).style.display = 'none'; });
   document.getElementById(TAB_PANELS[tab]).style.display = 'flex';
   if (tab === 'pid') showPidFolders();
+  const ctrl = tab === 'input' ? inputCtrl : tab === 'dumpcheck' ? dumpCtrl : null;
+  if (ctrl) ctrl.updateStatusBar();
 }
 
 /* ══════════════ MTO PROGRESS: ePULSE zone plan vs IPMCS MTO taken ══════════════ */
@@ -340,6 +342,14 @@ async function downloadReport(type, btn) {
 }
 document.querySelectorAll('[data-report]').forEach(btn =>
   btn.addEventListener('click', () => downloadReport(btn.dataset.report, btn)));
+
+/* ══════════════ More ▾ menus ══════════════ */
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.more-btn');
+  document.querySelectorAll('.more-wrap.open').forEach(wrap => { if (!btn || wrap !== btn.parentElement) wrap.classList.remove('open'); });
+  if (btn) btn.parentElement.classList.toggle('open');
+  else if (e.target.closest('.more-item')) e.target.closest('.more-wrap')?.classList.remove('open');
+});
 
 /* ══════════════ MTO SUMMARY badges ══════════════
    The saved-zones list was removed from MTO Summary (user, 2026-10-25) — the
@@ -502,6 +512,7 @@ function createMtoController(cfg) {
   async function openZone(zone) {
     state.zone = zone || '';
     state.zoneRec = null; state.rows = []; state.extracted = []; state.undo = []; state.selectedId = null;
+    state.sppidManual = false;
     state.lastRevision = null; state.basisChanges = [];
     const saved = zone && (state.savedZones || []).find(z => z.zone === zone);
     try {
@@ -520,9 +531,6 @@ function createMtoController(cfg) {
     fillHeader();
     markSaved(!!state.zoneRec);
     if (cfg.drivesShared) {
-      document.getElementById('selectedLineStat').innerHTML = state.zone
-        ? `<i class="ti ti-point-filled" style="font-size:8px;color:var(--color-accent-strong)"></i> ${escAttr(state.lineData.lineNo)} · Zone ${escAttr(state.zone)}`
-        : 'No line selected';
       renderSummaryTable();
     }
     refresh();
@@ -537,7 +545,6 @@ function createMtoController(cfg) {
     byId('mtoTitle').textContent = cfg.key === 'dumpcheck' ? 'MTO from Dump Check' : 'Manual MTO';
     fillHeader();
     markSaved(false);
-    if (cfg.drivesShared) document.getElementById('selectedLineStat').textContent = 'No line selected';
     refresh();
   }
 
@@ -616,14 +623,34 @@ function createMtoController(cfg) {
       input.value = v;
       if (k === 'source' || k === 'pidNo' || k === 'lineNo') input.title = v || 'From the line list / P&ID — read-only';
     });
+    byId('ld_mini').textContent = d
+      ? `${d.lineNo} · ${d.pipingSpec || '—'} · Des ${d.designPressure || '—'} / ${d.designTemp || '—'}`
+      : '';
     const note = byId('ld_line');
     note.textContent = d && d.dataMismatch ? `⚠ Line list and P&ID differ — line list used: ${d.dataMismatch}` : '';
     note.style.display = d && d.dataMismatch ? 'block' : 'none';
   }
 
+  // Footer: the line + zone being worked on and its last save (active tab only)
+  function updateStatusBar() {
+    if (activeTab !== cfg.key) return;
+    const d = state.lineData;
+    document.getElementById('selectedLineStat').innerHTML = d
+      ? `<i class="ti ti-point-filled" style="font-size:8px;color:var(--color-accent-strong)"></i> ${escAttr(d.lineNo)}${state.zone ? ' · Zone ' + escAttr(state.zone) : ' · no zone chosen'}`
+      : 'No line selected';
+    const r = state.lastRevision;
+    let save = '';
+    if (state.zoneRec && r) save = `Rev ${r.revNo} · saved by ${escAttr(r.savedBy)} · ${new Date(r.savedAt).toLocaleString()}`;
+    else if (state.zoneRec) save = `Saved by ${escAttr(state.zoneRec.updatedBy)} · ${new Date(state.zoneRec.updatedAt).toLocaleString()}`;
+    else if (d && state.zone) save = 'New zone — not saved yet';
+    if (state.dirty) save += (save ? ' · ' : '') + '<span style="color:var(--color-warning)">unsaved changes</span>';
+    document.getElementById('lastSaveStat').innerHTML = save;
+  }
+
   function renderHeaderStatus() {
     renderChanged();
     renderLineStrip();
+    updateStatusBar();
     const d = state.lineData;
     const statusEl = byId('ld_status');
     const status = state.zoneRec ? LINE_STATUS_TEXT[state.zoneRec.status] : d && state.zone ? 'New (not saved)' : '—';
@@ -729,6 +756,7 @@ function createMtoController(cfg) {
   }
 
   function renderExtracted(extractedStatus) {
+    if (!state.sppidManual) byId('extractedTbody').closest('.entry-split').classList.toggle('sppid-collapsed', !state.extracted.length);
     const wrap = byId('extractedTableWrap'), empty = byId('extractedEmptyState');
     if (!state.zone || !state.extracted.length) {
       wrap.style.display = 'none'; empty.style.display = 'flex';
@@ -892,11 +920,13 @@ function createMtoController(cfg) {
 
   function markUnsaved() {
     state.dirty = true;
+    setTimeout(updateStatusBar);
     byId('unsavedBadge').style.display = 'inline-flex';
     byId('savedBadge').style.display = 'none';
   }
   function markSaved(isSaved) {
     state.dirty = false;
+    setTimeout(updateStatusBar);
     byId('unsavedBadge').style.display = 'none';
     byId('savedBadge').style.display = isSaved ? 'inline-flex' : 'none';
   }
@@ -990,6 +1020,19 @@ function createMtoController(cfg) {
     if (e.target.closest('[data-edit-id]')) tr.querySelector('input[data-field="pipingClass"]').focus();
   });
 
+  // Line header collapse (remembered per browser) and SPPID panel toggle
+  const infoPanel = byId('li_service').closest('.line-info-panel');
+  const COLLAPSE_KEY = 'ipmcs_cos_collapsed';
+  try { if (localStorage.getItem(COLLAPSE_KEY) === '1') infoPanel.classList.add('cos-collapsed'); } catch (e) { /* storage unavailable */ }
+  byId('cosToggle').addEventListener('click', () => {
+    const on = infoPanel.classList.toggle('cos-collapsed');
+    try { localStorage.setItem(COLLAPSE_KEY, on ? '1' : '0'); } catch (e) { /* storage unavailable */ }
+  });
+  byId('sppidToggle').addEventListener('click', () => {
+    state.sppidManual = true;
+    byId('extractedTbody').closest('.entry-split').classList.toggle('sppid-collapsed');
+  });
+
   byId('addItemBtn').addEventListener('click', () => insertRow());
   byId('dupItemBtn').addEventListener('click', duplicateRow);
   byId('deleteItemBtn').addEventListener('click', () => deleteRow());
@@ -1021,6 +1064,7 @@ function createMtoController(cfg) {
     onlyLabel: cfg.onlyLabel,
     get activeLineId() { return state.zoneRec ? state.zoneRec.id : null; },
     get hasUnsavedChanges() { return state.dirty; },
+    updateStatusBar,
     populateServices, selectLine, zoneSavedElsewhere,
     // Unit switched: start again from Service for the new unit
     resetForUnit: async () => {
