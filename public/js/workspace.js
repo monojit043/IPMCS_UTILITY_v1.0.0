@@ -119,6 +119,7 @@ async function switchUnit(unitNo) {
     allLines = await loadAllLines();
     await Promise.all([inputCtrl.resetForUnit(), dumpCtrl.resetForUnit()]);
     renderSummaryTable(document.getElementById('summarySearch').value);
+    if (activeSection === 'summary') loadMtoProgress();
     showToast('success', `Unit ${unitNo}`, 'Lines and pick lists now show this unit');
   } catch (err) {
     showToast('error', 'Could not switch unit', err.message);
@@ -244,6 +245,7 @@ function switchSection(section) {
 
   if (section === 'summary') {
     renderSummaryTable(document.getElementById('summarySearch').value);
+    loadMtoProgress();
   } else if (section === 'mto') {
     switchTab('input');
   }
@@ -261,6 +263,63 @@ function switchTab(tab) {
   Object.values(TAB_PANELS).forEach(id => { document.getElementById(id).style.display = 'none'; });
   document.getElementById(TAB_PANELS[tab]).style.display = 'flex';
   if (tab === 'pid') showPidFolders();
+}
+
+/* ══════════════ MTO PROGRESS: ePULSE zone plan vs IPMCS MTO taken ══════════════ */
+async function loadMtoProgress() {
+  const box = document.getElementById('mtoProgress');
+  try {
+    renderMtoProgress(await DataStore.getMtoSummary());
+  } catch (err) {
+    box.innerHTML = `<div class="mp-note" style="color:var(--color-danger)">Could not load MTO progress: ${escAttr(err.message)}</div>`;
+  }
+}
+
+function renderMtoProgress(s) {
+  const box = document.getElementById('mtoProgress');
+  const L = s.lines, Z = s.lineZones;
+  const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
+  const stat = (label, value, cls = '') => `<div class="mp-stat ${cls}"><span class="mp-val">${value}</span><span class="mp-lbl">${label}</span></div>`;
+  const unit = DataStore.getUnit();
+
+  const linesCard = s.hasPlan ? `
+    <div class="mp-card">
+      <div class="mp-title">Lines — MTO progress</div>
+      <div class="mp-stats">
+        ${stat('Lines in zone plan', L.planned)}
+        ${stat('MTO taken', L.started, 'ok')}
+        ${stat('All zones done', L.complete, 'ok')}
+        ${stat('Left', L.left, L.left ? 'warn' : '')}
+      </div>
+      <div class="mp-bar"><span style="width:${pct(L.started, L.planned)}%"></span></div>
+      <div class="mp-note">${pct(L.started, L.planned)}% of planned lines started · line list + P&amp;IDs have ${L.inSources} lines${L.inSources > L.planned ? ` — ${L.inSources - L.planned} not in the zone plan yet` : ''}</div>
+    </div>` : `
+    <div class="mp-card">
+      <div class="mp-title">Lines — MTO progress</div>
+      <div class="mp-stats">
+        ${stat('Lines in line list + P&amp;IDs', L.inSources)}
+        ${stat('Lines in zone plan', 0, 'warn')}
+      </div>
+      <div class="mp-note">No zone plan for this unit (${escAttr(unit || '')}) in ePULSE yet. Allocate zones in
+        <b>ePULSE → Create Piping Line List → zone allocation</b>; planned vs taken then shows here.</div>
+    </div>`;
+
+  const rows = s.zones.map(z => `
+    <tr><td class="td-tag">${escAttr(z.zone)}</td>
+      <td class="td-num">${z.planned || '—'}</td><td class="td-num">${z.taken || '—'}</td>
+      <td class="td-num">${z.left || '—'}</td><td class="td-num">${z.notInPlan || '—'}</td></tr>`).join('');
+  const zonesCard = `
+    <div class="mp-card mp-zones">
+      <div class="mp-title">Zone-wise — ePULSE plan vs IPMCS</div>
+      <table>
+        <thead><tr><th>Zone</th><th style="text-align:right">Planned (ePULSE)</th><th style="text-align:right">MTO taken (IPMCS)</th>
+          <th style="text-align:right">Left</th><th style="text-align:right" title="Line + zone saved in IPMCS that the ePULSE plan doesn't have">Not in plan</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="5" style="color:var(--text-faint);padding:10px">No zones planned or taken yet</td></tr>'}</tbody>
+        ${s.zones.length ? `<tfoot><tr><td>Total</td><td class="td-num">${Z.planned}</td><td class="td-num">${Z.taken}</td><td class="td-num">${Z.left}</td><td class="td-num">${Z.notInPlan}</td></tr></tfoot>` : ''}
+      </table>
+      ${Z.savedWithoutRows ? `<div class="mp-note">${Z.savedWithoutRows} zone(s) saved with no MTO rows are not counted as taken.</div>` : ''}
+    </div>`;
+  box.innerHTML = linesCard + zonesCard;
 }
 
 /* ══════════════ MTO SUMMARY TABLE (line list) ══════════════ */
@@ -803,6 +862,7 @@ function createMtoController(cfg) {
       fillHeader();
       markSaved(true); refresh();
       if (cfg.drivesShared) renderSummaryTable(document.getElementById('summarySearch').value);
+      if (activeSection === 'summary') loadMtoProgress();
       if (cfg.onSaved) cfg.onSaved(full);
       showToast('success', `Saved · Rev ${state.lastRevision ? state.lastRevision.revNo : ''}`, `${state.rows.length} row(s) · ${d.lineNo} · Zone ${keepZone}`);
     } catch (err) {

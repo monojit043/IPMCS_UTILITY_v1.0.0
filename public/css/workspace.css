@@ -375,3 +375,19 @@ input.inline-input:focus { border-color: var(--color-accent); box-shadow: 0 0 0 
   box-shadow: none; cursor: default; opacity: 1;
 }
 .cos-diffnote { font-size: 11px; color: var(--color-warning); }
+
+/* ── MTO Summary: progress (ePULSE zone plan vs IPMCS) ── */
+.mto-progress { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--color-border); flex-shrink: 0; }
+.mp-card { background: var(--color-surface-alt); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 10px 12px; min-width: 0; }
+.mp-title { font-family: var(--font-display); font-size: 9px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; }
+.mp-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.mp-stat { display: flex; flex-direction: column; }
+.mp-val { font-family: var(--font-mono); font-size: 22px; font-weight: 600; color: var(--text-primary); line-height: 1.1; }
+.mp-lbl { font-size: 10px; color: var(--text-muted); }
+.mp-stat.ok .mp-val { color: var(--color-success); }
+.mp-stat.warn .mp-val { color: var(--color-warning); }
+.mp-bar { height: 6px; border-radius: 3px; background: var(--color-border); margin: 10px 0 6px; overflow: hidden; }
+.mp-bar span { display: block; height: 100%; background: var(--color-success); }
+.mp-note { font-size: 11px; color: var(--text-muted); line-height: 1.5; }
+.mp-zones table { width: 100%; }
+.mp-zones tfoot td { font-weight: 700; border-top: 1px solid var(--color-border-strong); padding: 4px 8px; }

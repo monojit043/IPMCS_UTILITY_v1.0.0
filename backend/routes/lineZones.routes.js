@@ -6,6 +6,7 @@ const router = express.Router();
 
 // What engineers save: one line + zone with its COSMAS header and BoM rows
 router.get('/', asyncHandler(c.listZones));
+router.get('/summary', asyncHandler(c.getSummary));
 router.put('/', asyncHandler(c.saveZone));
 router.get('/:id', asyncHandler(c.getZone));
 router.get('/:id/revisions', asyncHandler(c.listRevisions));

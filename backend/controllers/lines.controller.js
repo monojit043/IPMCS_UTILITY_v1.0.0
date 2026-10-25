@@ -2,6 +2,7 @@ const HttpError = require('../middlewares/HttpError');
 const lineData = require('../services/lineData.service');
 const lineZones = require('../services/lineZones.service');
 const { namesFor } = require('../services/auth.service');
+const summary = require('../services/summary.service');
 
 // ── Line selection: Service → LSR NO → Subline No. (live from ePULSE) ──
 async function services(req, res) {
@@ -86,4 +87,9 @@ async function saveZone(req, res) {
   }
 }
 
-module.exports = { services, lsrNos, sublines, data, zones, listZones, getZone, saveZone, listRevisions, getRevision };
+// MTO Summary: ePULSE zone plan vs IPMCS MTO taken, for the unit
+async function getSummary(req, res) {
+  res.json(await summary.getSummary(req.user.jobNo, req.user.unitNo));
+}
+
+module.exports = { getSummary, services, lsrNos, sublines, data, zones, listZones, getZone, saveZone, listRevisions, getRevision };

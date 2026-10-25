@@ -219,6 +219,10 @@ const DataStore = (() => {
   function saveLineZone(payload) {
     return apiFetch('/line-zones', { method: 'PUT', body: JSON.stringify(payload) });
   }
+  // MTO Summary: ePULSE zone plan vs IPMCS MTO taken, for the current unit
+  function getMtoSummary() {
+    return apiFetch('/line-zones/summary');
+  }
   // View History: every saved revision (newest first) / one revision in full
   function getZoneRevisions(id) {
     return apiFetch(`/line-zones/${id}/revisions`);
@@ -287,7 +291,7 @@ const DataStore = (() => {
   return {
     login, ssoLogin, logout, selectAssignment, getSession, clearSession, getUnits, getUnit, setUnit, getPendingAssignment, clearPendingAssignment,
     getServices, getLsrNos, getSublines, getLineData, getZones,
-    getLineZones, getLineZone, saveLineZone, getZoneRevisions, getZoneRevision,
+    getLineZones, getLineZone, saveLineZone, getMtoSummary, getZoneRevisions, getZoneRevision,
     getPidFolders, createPidFolder, getPidDocuments,
     getAvailablePimsDocuments, addPidFolderSelection, removePidFolderSelection,
     getPidDocument, getPidDocumentForLine, pidFileUrl, authHeaders,
