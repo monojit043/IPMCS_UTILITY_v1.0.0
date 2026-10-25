@@ -3,6 +3,7 @@ const lineData = require('../services/lineData.service');
 const lineZones = require('../services/lineZones.service');
 const { namesFor } = require('../services/auth.service');
 const summary = require('../services/summary.service');
+const reports = require('../services/reports.service');
 
 // ── Line selection: Service → LSR NO → Subline No. (live from ePULSE) ──
 async function services(req, res) {
@@ -87,9 +88,26 @@ async function saveZone(req, res) {
   }
 }
 
+// Search/Delete Lines/Print: every line + zone with MTO taken in the unit
+async function searchZones(req, res) {
+  res.json(await reports.overview(req.user.jobNo, req.user.unitNo));
+}
+
+// Delete a line + zone (archived first). Allowed for whoever created or last
+// saved it, or an IPMCS Admin.
+async function deleteZone(req, res) {
+  const zone = await ownZone(req);
+  const me = String(req.user.empId).toUpperCase();
+  const mine = [zone.createdBy, zone.updatedBy].some((e) => String(e || '').toUpperCase() === me);
+  if (!mine && req.user.role !== 'ADMIN') throw new HttpError(403, 'Only the engineer who saved this line + zone, or an Admin, can delete it');
+  const out = await lineZones.deleteZone(zone.id, req.user.empId, (req.body && req.body.reason) || null);
+  if (!out) throw new HttpError(404, 'Line zone not found');
+  res.json({ ok: true, ...out });
+}
+
 // MTO Summary: ePULSE zone plan vs IPMCS MTO taken, for the unit
 async function getSummary(req, res) {
   res.json(await summary.getSummary(req.user.jobNo, req.user.unitNo));
 }
 
-module.exports = { getSummary, services, lsrNos, sublines, data, zones, listZones, getZone, saveZone, listRevisions, getRevision };
+module.exports = { searchZones, deleteZone, getSummary, services, lsrNos, sublines, data, zones, listZones, getZone, saveZone, listRevisions, getRevision };

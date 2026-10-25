@@ -343,6 +343,129 @@ async function downloadReport(type, btn) {
 document.querySelectorAll('[data-report]').forEach(btn =>
   btn.addEventListener('click', () => downloadReport(btn.dataset.report, btn)));
 
+/* ══════════════ LINES window: search / delete / print line + zones with MTO taken ══════════════ */
+const LINE_STATUS_LABEL = { pending: 'Pending', inprogress: 'In Progress', complete: 'Complete' };
+let linesAll = [], linesCtrl = null;
+
+async function openLinesModal(ctrl) {
+  linesCtrl = ctrl;
+  document.getElementById('linesTitle').textContent = `Lines — MTO taken · ${currentUser.jobNo || ''} · Unit ${DataStore.getUnit() || '—'}`;
+  document.getElementById('linesTbody').innerHTML = '<tr><td colspan="15" style="padding:14px;color:var(--text-faint)">Loading…</td></tr>';
+  document.getElementById('linesModal').classList.add('open');
+  try {
+    linesAll = await DataStore.searchLineZones();
+  } catch (err) {
+    document.getElementById('linesTbody').innerHTML = `<tr><td colspan="15" style="padding:14px;color:var(--color-danger)">${escAttr(err.message)}</td></tr>`;
+    return;
+  }
+  const fill = (id, values, first) => {
+    const sel = document.getElementById(id), keep = sel.value;
+    sel.innerHTML = `<option value="">${first}</option>` + values.map(v => `<option value="${escAttr(v)}">${escAttr(v)}</option>`).join('');
+    if (values.includes(keep)) sel.value = keep;
+  };
+  fill('lfService', [...new Set(linesAll.map(l => l.service))].sort(), 'All services');
+  fill('lfZone', [...new Set(linesAll.map(l => l.zone))].sort(), 'All zones');
+  document.getElementById('lfPlan').style.display = linesAll.some(l => l.inPlan !== null) ? '' : 'none';
+  renderLines();
+}
+
+function filteredLines() {
+  const q = document.getElementById('lfText').value.trim().toLowerCase();
+  const service = document.getElementById('lfService').value, zone = document.getElementById('lfZone').value;
+  const status = document.getElementById('lfStatus').value, plan = document.getElementById('lfPlan').value;
+  const changed = document.getElementById('lfChanged').checked;
+  return linesAll.filter(l =>
+    (!q || [l.lineNo, l.lsrNo, l.lineKey, l.service].some(v => String(v || '').toLowerCase().includes(q))) &&
+    (!service || l.service === service) && (!zone || l.zone === zone) && (!status || l.status === status) &&
+    (!plan || (plan === 'yes' ? l.inPlan === true : l.inPlan === false)) &&
+    (!changed || l.changes.length));
+}
+
+const changesText = (l) => l.changes.map(c => `${c.label}: ${c.was ?? '—'} → ${c.now ?? '—'}`).join('\n');
+
+function renderLines() {
+  const list = filteredLines();
+  document.getElementById('lfCount').textContent = `${list.length} of ${linesAll.length}`;
+  const me = String(currentUser.empId || '').toUpperCase();
+  document.getElementById('linesTbody').innerHTML = list.map(l => {
+    const canDelete = currentUser.role === 'ADMIN' || [l.createdBy, l.savedBy].some(e => String(e || '').toUpperCase() === me);
+    return `<tr>
+      <td class="td-tag">${escAttr(l.lineNo || '— (not in sources)')}</td><td>${escAttr(l.service)}</td><td>${escAttr(l.lsrNo)}</td>
+      <td>${escAttr(l.sublineNo || '—')}</td><td>${escAttr(l.zone)}</td><td class="td-tag">${escAttr(l.lineKey)}</td>
+      <td class="td-num">${l.items}</td><td class="td-num">${l.dumpRows}</td><td>${STATUS_BADGE[l.status] || escAttr(l.status)}</td>
+      <td>${l.revNo ? 'Rev ' + l.revNo : '—'}</td><td title="${escAttr(l.savedBy)}">${escAttr(l.savedByName || '—')}</td>
+      <td>${l.savedAt ? new Date(l.savedAt).toLocaleString() : '—'}</td>
+      <td>${l.inPlan === null ? '—' : l.inPlan ? 'Yes' : 'No'}</td>
+      <td>${l.changes.length ? `<span class="chg" title="${escAttr(changesText(l))}">⚠ ${l.changes.length}</span>` : '—'}</td>
+      <td class="td-acts">
+        <div class="tool-btn" data-open-id="${l.id}" title="Open in the MTO tab"><i class="ti ti-arrow-right"></i></div>
+        ${canDelete ? `<div class="tool-btn" data-del-id="${l.id}" title="Delete this line + zone (archived)" style="color:var(--color-danger)"><i class="ti ti-trash"></i></div>` : ''}
+      </td></tr>`;
+  }).join('') || '<tr><td colspan="15" style="padding:14px;color:var(--text-faint)">No line + zones match</td></tr>';
+}
+
+async function deleteLineZone(id) {
+  const l = linesAll.find(x => x.id === id);
+  if (!l) return;
+  const reason = prompt(`Delete ${l.lineNo || l.service + '-' + l.lsrNo} zone ${l.zone}?\n\n${l.items} MTO row(s), ${l.dumpRows} model-dump row(s) and all revisions will be removed from IPMCS (an archive copy is kept for backtracking).\n\nReason (optional) — press OK to delete, Cancel to keep it:`, '');
+  if (reason === null) return;
+  try {
+    const out = await DataStore.deleteLineZone(id, reason.trim());
+    showToast('success', 'Line + zone deleted', `Archived as #${out.archiveId} with ${out.rows} row(s) and ${out.revisions} revision(s)`);
+    allLines = await loadAllLines();
+    renderSummaryTable();
+    [inputCtrl, dumpCtrl].forEach(c => { if (c.activeLineId === id) c.resetForUnit(); });
+    linesAll = linesAll.filter(x => x.id !== id);
+    renderLines();
+  } catch (err) {
+    showToast('error', 'Could not delete', err.message);
+  }
+}
+
+function printLines() {
+  const list = filteredLines();
+  const filters = [
+    document.getElementById('lfText').value && `search "${document.getElementById('lfText').value}"`,
+    document.getElementById('lfService').value && `service ${document.getElementById('lfService').value}`,
+    document.getElementById('lfZone').value && `zone ${document.getElementById('lfZone').value}`,
+    document.getElementById('lfStatus').value && `status ${LINE_STATUS_LABEL[document.getElementById('lfStatus').value]}`,
+    document.getElementById('lfPlan').value && (document.getElementById('lfPlan').value === 'yes' ? 'in zone plan' : 'not in plan'),
+    document.getElementById('lfChanged').checked && 'line data changed since save',
+  ].filter(Boolean).join(' · ') || 'all';
+  const cell = (v) => escAttr(v ?? '');
+  const win = window.open('', '_blank');
+  if (!win) { showToast('error', 'Pop-up blocked', 'Allow pop-ups for IPMCS to print'); return; }
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>IPMCS — Lines with MTO taken</title>
+    <style>body{font:11px Arial,sans-serif;margin:16px;color:#111}h1{font-size:15px;margin:0 0 4px}.sub{color:#555;margin-bottom:10px}
+    table{border-collapse:collapse;width:100%}th,td{border:1px solid #999;padding:3px 5px;text-align:left}th{background:#eee}
+    td.n{text-align:right}@page{size:A4 landscape;margin:10mm}</style></head><body>
+    <h1>Lines with MTO taken — ${cell(currentUser.jobName || '')} ${cell(currentUser.jobNo)} · Unit ${cell(DataStore.getUnit())}</h1>
+    <div class="sub">Filter: ${cell(filters)} · ${list.length} line + zone(s) · printed ${new Date().toLocaleString()} by ${cell(currentUser.name)}</div>
+    <table><thead><tr><th>Line No</th><th>Service</th><th>LSR NO</th><th>Sub</th><th>Zone</th><th>Line Key</th><th>MTO rows</th><th>Dump rows</th>
+      <th>Status</th><th>Rev</th><th>Saved by</th><th>Saved at</th><th>In plan</th><th>Line data changed since save</th></tr></thead><tbody>
+    ${list.map(l => `<tr><td>${cell(l.lineNo)}</td><td>${cell(l.service)}</td><td>${cell(l.lsrNo)}</td><td>${cell(l.sublineNo)}</td><td>${cell(l.zone)}</td>
+      <td>${cell(l.lineKey)}</td><td class="n">${l.items}</td><td class="n">${l.dumpRows}</td><td>${cell(LINE_STATUS_LABEL[l.status] || l.status)}</td>
+      <td>${l.revNo || ''}</td><td>${cell(l.savedByName)}</td><td>${l.savedAt ? cell(new Date(l.savedAt).toLocaleString()) : ''}</td>
+      <td>${l.inPlan === null ? '' : l.inPlan ? 'Yes' : 'No'}</td><td>${cell(changesText(l).replace(/\n/g, '; '))}</td></tr>`).join('')}
+    </tbody></table><script>window.onload=function(){window.print();}<\/script></body></html>`);
+  win.document.close();
+}
+
+['lfText', 'lfService', 'lfZone', 'lfStatus', 'lfPlan', 'lfChanged'].forEach(id =>
+  document.getElementById(id).addEventListener(id === 'lfText' ? 'input' : 'change', renderLines));
+document.getElementById('lfPrint').addEventListener('click', printLines);
+document.getElementById('closeLinesModal').addEventListener('click', () => document.getElementById('linesModal').classList.remove('open'));
+document.getElementById('linesModal').addEventListener('click', (e) => { if (e.target.id === 'linesModal') e.target.classList.remove('open'); });
+document.getElementById('linesTbody').addEventListener('click', async (e) => {
+  const open = e.target.closest('[data-open-id]'), del = e.target.closest('[data-del-id]');
+  if (del) return deleteLineZone(Number(del.dataset.delId));
+  if (!open) return;
+  document.getElementById('linesModal').classList.remove('open');
+  switchSection('mto');
+  switchTab(linesCtrl && linesCtrl.key === 'dumpcheck' ? 'dumpcheck' : 'input');
+  await (linesCtrl || inputCtrl).selectLine(Number(open.dataset.openId));
+});
+
 /* ══════════════ More ▾ menus ══════════════ */
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('.more-btn');
@@ -1052,6 +1175,7 @@ function createMtoController(cfg) {
   });
   byId('openPidBtn').addEventListener('click', openPidViewer);
   byId('uploadBtn').addEventListener('click', () => openUploadModal(controller));
+  byId('mtoTbody').closest('.entry-col').querySelector('[data-action="lines"]').addEventListener('click', () => openLinesModal(controller));
   byId('mtoTbody').closest('.entry-col').querySelectorAll('.cos-soon').forEach(btn => {
     btn.addEventListener('click', () => showToast('info', btn.dataset.label, 'Coming soon — this COSMAS function is not built yet'));
   });

@@ -98,6 +98,28 @@ async function zoneStatus(jobNo, unitNo) {
   return { header, rows };
 }
 
+// Every line + zone of the unit as objects (the Lines window: search / delete / print)
+async function overview(jobNo, unitNo) {
+  const zones = await zonesWithLines(jobNo, unitNo);
+  const { rows: plan } = await queryEpulse(`SELECT service, seq_no, upper(zone) AS zone FROM piping_line_list WHERE job_no = $1 AND unit_no = $2`, [jobNo, unitNo]);
+  const planned = new Set(plan.map((p) => `${p.service}|${p.seq_no}|${p.zone}`));
+  const names = await namesFor(zones.map((z) => z.updatedBy));
+  return zones.map((z) => {
+    const seq = z.sublineNo ? `${z.lsrNo}-${z.sublineNo}` : z.lsrNo;
+    const changes = !z.basis ? []
+      : !z.line ? [{ label: 'Line', was: z.basis.lineNo, now: 'no longer in line list / P&IDs' }]
+      : lineData.compareBasis(z.basis, z.liveBasis);
+    return {
+      id: z.id, lineNo: z.line ? z.line.lineNo : null, service: z.service, lsrNo: z.lsrNo, sublineNo: z.sublineNo, zone: z.zone,
+      lineKey: lineKey(z), status: z.status, items: z.items, dumpRows: z.dumpRows,
+      sizeIn: z.line?.sizeIn || null, pipingSpec: z.line?.pipingSpec || null,
+      pids: pidsText(z.liveBasis?.pids), inPlan: plan.length ? planned.has(`${z.service}|${seq}|${z.zone}`) : null,
+      revNo: z.revNo, savedBy: z.updatedBy, savedByName: names.get(String(z.updatedBy || '').toUpperCase()) || z.updatedBy,
+      savedAt: z.updatedAt, createdBy: z.createdBy, changes,
+    };
+  });
+}
+
 async function progress(jobNo, unitNo) {
   const s = await summary.getSummary(jobNo, unitNo);
   const header = ['Zone', 'Planned (ePULSE)', 'MTO taken (IPMCS)', 'Left', 'Not in plan'];
@@ -160,4 +182,4 @@ async function build(type, jobNo, unitNo) {
   return { filename: `${jobNo}_${unitNo}_${def.file}_${stamp}.csv`, csv: toCsv(t.header, t.rows), rows: t.rows.length };
 }
 
-module.exports = { REPORTS, build };
+module.exports = { REPORTS, build, overview };

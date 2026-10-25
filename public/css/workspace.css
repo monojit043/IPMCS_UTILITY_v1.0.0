@@ -417,7 +417,7 @@ input.inline-input:focus { border-color: var(--color-accent); box-shadow: 0 0 0 
   border-radius: var(--radius-sm); color: var(--text-secondary); font-size: 12px; text-align: left; cursor: pointer;
 }
 .more-item:hover { background: var(--color-accent-soft); color: var(--text-primary); }
-.more-item::after { content: 'soon'; margin-left: auto; font-size: 9px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .05em; }
+.more-item.cos-soon::after { content: 'soon'; margin-left: auto; font-size: 9px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .05em; }
 
 /* line header: denser — 8 columns, lower boxes; collapsible to its title line */
 .line-info-panel { --cos-box-h: 25px; padding-top: 6px; padding-bottom: 6px; }
@@ -463,3 +463,13 @@ input.inline-input:focus { border-color: var(--color-accent); box-shadow: 0 0 0 
 #li_subline, #dc_li_subline { min-width: 100px; }
 #li_zone, #dc_li_zone { min-width: 230px; }
 .line-info-panel.cos-collapsed .li-col-select .li-col-title { display: block; }
+
+/* ── Lines window (Search/Delete Lines/Print) ── */
+.modal.lines-modal { max-width: 1280px; }
+.lines-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.lines-filters input[type="text"] { width: 240px; padding: 5px 9px; font-size: 12px; }
+.lines-filters select { width: auto; padding: 5px 9px; font-size: 12px; }
+.lf-check { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-secondary); white-space: nowrap; }
+.lines-table { max-height: 62vh; border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+.lines-table td { white-space: nowrap; }
+.lines-table .chg { color: var(--color-warning); cursor: help; }

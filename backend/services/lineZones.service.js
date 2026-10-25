@@ -217,4 +217,36 @@ async function saveZone({ jobNo, unitNo, empId, service, lsrNo, sublineNo, zone,
   }
 }
 
-module.exports = { listZones, zonesForLine, getZone, getZoneFull, saveZone, listRevisions, getRevision, normalizeZone, InputError };
+// Delete a line + zone: archive the zone, its rows and every revision as one
+// snapshot (mto_line_zone_deletions), then delete — all in one transaction.
+async function deleteZone(id, empId, reason) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows: [zone] } = await client.query(`SELECT * FROM mto_line_zones WHERE id = $1 FOR UPDATE`, [id]);
+    if (!zone) { await client.query('ROLLBACK'); return null; }
+    const part = async (sql) => (await client.query(sql, [id])).rows;
+    const snapshot = {
+      zone,
+      manualMto: await part(`SELECT * FROM manual_mto_data WHERE line_zone_id = $1 ORDER BY id`),
+      modelDump: await part(`SELECT * FROM model_dump_data WHERE line_zone_id = $1 ORDER BY id`),
+      sppid: await part(`SELECT * FROM sppid_extracted_data WHERE line_zone_id = $1 ORDER BY id`),
+      revisions: await part(`SELECT * FROM mto_line_zone_revisions WHERE line_zone_id = $1 ORDER BY rev_no`),
+    };
+    const { rows: [archived] } = await client.query(
+      `INSERT INTO mto_line_zone_deletions (line_zone_id, job_no, unit_no, service, lsr_no, subline_no, zone, snapshot, reason, deleted_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id, deleted_at AS "deletedAt"`,
+      [id, zone.job_no, zone.unit_no, zone.service, zone.lsr_no, zone.subline_no, zone.zone, JSON.stringify(snapshot), reason || null, empId]
+    );
+    await client.query(`DELETE FROM mto_line_zones WHERE id = $1`, [id]);   // rows + revisions cascade
+    await client.query('COMMIT');
+    return { archiveId: archived.id, deletedAt: archived.deletedAt, rows: snapshot.manualMto.length + snapshot.modelDump.length, revisions: snapshot.revisions.length };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+module.exports = { deleteZone, listZones, zonesForLine, getZone, getZoneFull, saveZone, listRevisions, getRevision, normalizeZone, InputError };

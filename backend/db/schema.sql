@@ -177,6 +177,24 @@ CREATE TABLE IF NOT EXISTS sppid_extracted_data (
 -- line-list revision it came from), so any MTO can be traced back to what it
 -- was based on — the line data itself is otherwise only ever read live.
 -- `header` / `rows` are the COSMAS header and the BoM rows of that tab as saved.
+-- Deleted line + zones (Search/Delete Lines): the zone row, its MTO / model
+-- dump rows and ALL its revisions are archived here as one snapshot before
+-- the delete, so a deleted MTO can still be traced back.
+CREATE TABLE IF NOT EXISTS mto_line_zone_deletions (
+  id            SERIAL PRIMARY KEY,
+  line_zone_id  INTEGER NOT NULL,
+  job_no        VARCHAR(20) NOT NULL,
+  unit_no       VARCHAR(10) NOT NULL,
+  service       VARCHAR(20) NOT NULL,
+  lsr_no        VARCHAR(20) NOT NULL,
+  subline_no    VARCHAR(10) NOT NULL DEFAULT '',
+  zone          VARCHAR(3)  NOT NULL,
+  snapshot      JSONB NOT NULL,
+  reason        TEXT,
+  deleted_by    VARCHAR(50) NOT NULL,
+  deleted_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS mto_line_zone_revisions (
   id            SERIAL PRIMARY KEY,
   line_zone_id  INTEGER NOT NULL REFERENCES mto_line_zones(id) ON DELETE CASCADE,

@@ -359,7 +359,7 @@
                       <button class="btn btn-ghost btn-sm more-btn" type="button"><i class="ti ti-dots"></i>More<i class="ti ti-chevron-down"></i></button>
                       <div class="more-menu">
                         <button class="more-item cos-soon" data-label="Switch to BULK BoM"><i class="ti ti-switch-horizontal"></i>Switch to BULK BoM</button>
-                        <button class="more-item cos-soon" data-label="Search/Delete Lines/Print"><i class="ti ti-search"></i>Search/Delete Lines/Print</button>
+                        <button class="more-item" data-action="lines"><i class="ti ti-search"></i>Search/Delete Lines/Print</button>
                         <button class="more-item cos-soon" data-label="MTO Process"><i class="ti ti-player-play"></i>MTO Process</button>
                         <button class="more-item cos-soon" data-label="Update AFC Key"><i class="ti ti-key"></i>Update AFC Key</button>
                         <button class="more-item cos-soon" data-label="Copy to BULK BoM"><i class="ti ti-copy"></i>Copy to BULK BoM</button>
@@ -608,7 +608,7 @@
                       <button class="btn btn-ghost btn-sm more-btn" type="button"><i class="ti ti-dots"></i>More<i class="ti ti-chevron-down"></i></button>
                       <div class="more-menu">
                         <button class="more-item cos-soon" data-label="Switch to BULK BoM"><i class="ti ti-switch-horizontal"></i>Switch to BULK BoM</button>
-                        <button class="more-item cos-soon" data-label="Search/Delete Lines/Print"><i class="ti ti-search"></i>Search/Delete Lines/Print</button>
+                        <button class="more-item" data-action="lines"><i class="ti ti-search"></i>Search/Delete Lines/Print</button>
                         <button class="more-item cos-soon" data-label="MTO Process"><i class="ti ti-player-play"></i>MTO Process</button>
                         <button class="more-item cos-soon" data-label="Update AFC Key"><i class="ti ti-key"></i>Update AFC Key</button>
                         <button class="more-item cos-soon" data-label="Copy to BULK BoM"><i class="ti ti-copy"></i>Copy to BULK BoM</button>
@@ -857,6 +857,40 @@
 </div>
 
 <!-- UPLOAD MODAL -->
+<!-- ═══ LINES: search / delete / print the line + zones with MTO taken ═══ -->
+<div class="modal-overlay" id="linesModal">
+  <div class="modal modal-wide lines-modal">
+    <div class="modal-header">
+      <i class="ti ti-search" style="font-size:18px;color:var(--color-accent-strong)"></i>
+      <div class="modal-title" id="linesTitle">Lines — MTO taken</div>
+      <div class="modal-close" id="closeLinesModal"><i class="ti ti-x"></i></div>
+    </div>
+    <div class="modal-body">
+      <div class="lines-filters">
+        <input type="text" id="lfText" placeholder="Search line no., LSR NO, line key…"/>
+        <select id="lfService"><option value="">All services</option></select>
+        <select id="lfZone"><option value="">All zones</option></select>
+        <select id="lfStatus"><option value="">All status</option><option value="inprogress">In Progress</option><option value="pending">Pending</option><option value="complete">Complete</option></select>
+        <select id="lfPlan"><option value="">Plan: all</option><option value="yes">In zone plan</option><option value="no">Not in plan</option></select>
+        <label class="lf-check"><input type="checkbox" id="lfChanged"/> Line data changed since save</label>
+        <span class="badge badge-muted" id="lfCount">0</span>
+        <div style="flex:1"></div>
+        <button class="btn btn-outline btn-sm" id="lfPrint"><i class="ti ti-printer"></i>Print</button>
+      </div>
+      <div class="table-wrap lines-table">
+        <table>
+          <thead><tr>
+            <th>Line No</th><th>Service</th><th>LSR NO</th><th>Sub</th><th>Zone</th><th>Line Key</th>
+            <th style="text-align:right">MTO rows</th><th style="text-align:right">Dump rows</th><th>Status</th><th>Rev</th>
+            <th>Saved by</th><th>Saved at</th><th>In plan</th><th>Changed</th><th style="text-align:right">Actions</th>
+          </tr></thead>
+          <tbody id="linesTbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ═══ MTO REVISION HISTORY ═══ -->
 <div class="modal-overlay" id="historyModal">
   <div class="modal modal-wide">

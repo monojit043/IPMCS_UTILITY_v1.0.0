@@ -219,6 +219,14 @@ const DataStore = (() => {
   function saveLineZone(payload) {
     return apiFetch('/line-zones', { method: 'PUT', body: JSON.stringify(payload) });
   }
+  // Search/Delete Lines/Print: every line + zone with MTO taken in the unit
+  function searchLineZones() {
+    return apiFetch('/line-zones/search');
+  }
+  // Delete a line + zone (archived on the server first)
+  function deleteLineZone(id, reason) {
+    return apiFetch(`/line-zones/${id}`, { method: 'DELETE', body: JSON.stringify({ reason: reason || null }) });
+  }
   // MTO Summary: ePULSE zone plan vs IPMCS MTO taken, for the current unit
   function getMtoSummary() {
     return apiFetch('/line-zones/summary');
@@ -291,7 +299,7 @@ const DataStore = (() => {
   return {
     login, ssoLogin, logout, selectAssignment, getSession, clearSession, getUnits, getUnit, setUnit, getPendingAssignment, clearPendingAssignment,
     getServices, getLsrNos, getSublines, getLineData, getZones,
-    getLineZones, getLineZone, saveLineZone, getMtoSummary, getZoneRevisions, getZoneRevision,
+    getLineZones, getLineZone, saveLineZone, getMtoSummary, searchLineZones, deleteLineZone, getZoneRevisions, getZoneRevision,
     getPidFolders, createPidFolder, getPidDocuments,
     getAvailablePimsDocuments, addPidFolderSelection, removePidFolderSelection,
     getPidDocument, getPidDocumentForLine, pidFileUrl, authHeaders,
