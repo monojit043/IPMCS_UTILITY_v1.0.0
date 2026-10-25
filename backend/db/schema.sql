@@ -17,6 +17,13 @@ BEGIN
   IF to_regclass('public.user_assignments') IS NOT NULL AND to_regclass('public.ipmcs_user_assignments') IS NULL THEN
     ALTER TABLE user_assignments RENAME TO ipmcs_user_assignments;
   END IF;
+  IF to_regclass('public.ipmcs_user_assignments') IS NOT NULL THEN
+    ALTER SEQUENCE IF EXISTS user_assignments_id_seq RENAME TO ipmcs_user_assignments_id_seq;
+    FOR r IN SELECT conname FROM pg_constraint
+             WHERE conrelid = 'public.ipmcs_user_assignments'::regclass AND conname LIKE 'user\_assignments%' LOOP
+      EXECUTE format('ALTER TABLE ipmcs_user_assignments RENAME CONSTRAINT %I TO %I', r.conname, 'ipmcs_' || r.conname);
+    END LOOP;
+  END IF;
   IF to_regclass('public.users') IS NOT NULL THEN
     FOR r IN SELECT conrelid::regclass AS tbl, conname FROM pg_constraint
              WHERE contype = 'f' AND confrelid = 'public.users'::regclass LOOP
@@ -92,65 +99,75 @@ CREATE TABLE IF NOT EXISTS mto_line_zones (
 );
 CREATE INDEX IF NOT EXISTS idx_mto_line_zones_unit ON mto_line_zones (job_no, unit_no);
 
--- One-time (2026-10-25): dump_items → model_dump_data and
--- extracted_items → sppid_extracted_data (with their id sequences / indexes).
+-- One-time (2026-10-25): BoM tables renamed to what they hold, with their
+-- id sequences, indexes and constraint names —
+--   mto_items → manual_mto_data, dump_items → model_dump_data,
+--   extracted_items → sppid_extracted_data
+-- and the prototype's columns renamed to the COSMAS names:
+--   spec → piping_class, size → dia1.
 DO $$
-DECLARE r record;
+DECLARE
+  r record;
+  m text[];
+  renames text[][] := ARRAY[
+    ARRAY['mto_items', 'manual_mto_data'],
+    ARRAY['dump_items', 'model_dump_data'],
+    ARRAY['extracted_items', 'sppid_extracted_data']];
 BEGIN
-  IF to_regclass('public.dump_items') IS NOT NULL AND to_regclass('public.model_dump_data') IS NULL THEN
-    ALTER TABLE dump_items RENAME TO model_dump_data;
-    ALTER SEQUENCE IF EXISTS dump_items_id_seq RENAME TO model_dump_data_id_seq;
-    ALTER INDEX IF EXISTS idx_dump_items_zone RENAME TO idx_model_dump_data_zone;
-  END IF;
-  IF to_regclass('public.extracted_items') IS NOT NULL AND to_regclass('public.sppid_extracted_data') IS NULL THEN
-    ALTER TABLE extracted_items RENAME TO sppid_extracted_data;
-    ALTER SEQUENCE IF EXISTS extracted_items_id_seq RENAME TO sppid_extracted_data_id_seq;
-    ALTER INDEX IF EXISTS idx_extracted_items_zone RENAME TO idx_sppid_extracted_data_zone;
-  END IF;
-  -- constraint names (primary / foreign keys) follow the new table names
-  FOR r IN SELECT conrelid::regclass::text AS tbl, conname,
-                  CASE WHEN conname LIKE 'dump\_items%' THEN 'model_dump_data' || substr(conname, 11)
-                       ELSE 'sppid_extracted_data' || substr(conname, 16) END AS newname
-           FROM pg_constraint
-           WHERE conrelid IN (to_regclass('public.model_dump_data'), to_regclass('public.sppid_extracted_data'))
-             AND (conname LIKE 'dump\_items%' OR conname LIKE 'extracted\_items%') LOOP
-    EXECUTE format('ALTER TABLE %s RENAME CONSTRAINT %I TO %I', r.tbl, r.conname, r.newname);
+  FOREACH m SLICE 1 IN ARRAY renames LOOP
+    IF to_regclass('public.' || m[1]) IS NOT NULL AND to_regclass('public.' || m[2]) IS NULL THEN
+      EXECUTE format('ALTER TABLE %I RENAME TO %I', m[1], m[2]);
+      EXECUTE format('ALTER SEQUENCE IF EXISTS %I RENAME TO %I', m[1] || '_id_seq', m[2] || '_id_seq');
+      EXECUTE format('ALTER INDEX IF EXISTS %I RENAME TO %I', 'idx_' || m[1] || '_zone', 'idx_' || m[2] || '_zone');
+    END IF;
+    IF to_regclass('public.' || m[2]) IS NOT NULL THEN
+      FOR r IN SELECT conname FROM pg_constraint
+               WHERE conrelid = to_regclass('public.' || m[2]) AND conname LIKE replace(m[1], '_', '\_') || '%' LOOP
+        EXECUTE format('ALTER TABLE %I RENAME CONSTRAINT %I TO %I', m[2], r.conname, m[2] || substr(r.conname, length(m[1]) + 1));
+      END LOOP;
+      IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = m[2] AND column_name = 'spec') THEN
+        EXECUTE format('ALTER TABLE %I RENAME COLUMN spec TO piping_class', m[2]);
+      END IF;
+      IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = m[2] AND column_name = 'size') THEN
+        EXECUTE format('ALTER TABLE %I RENAME COLUMN size TO dia1', m[2]);
+      END IF;
+    END IF;
   END LOOP;
 END $$;
 
--- Bill of Material rows of a line + zone, all in COSMAS columns:
--- Piping Class (spec) | Input Code | Item Code | Dia1 (size) | Dia2 | Qty.
---   mto_items            — manual MTO (MTO Input tab)
+-- Bill of Material rows of a line + zone, in COSMAS columns:
+-- Piping Class | Input Code | Item Code | Dia1 | Dia2 | Qty.
+--   manual_mto_data      — MTO typed in the MTO Input tab
 --   model_dump_data      — MTO from the 3D model dump (MTO from Dump Check tab)
 --   sppid_extracted_data — quantities extracted from the SmartPlant P&ID,
 --                          the reference both tabs are compared with
-CREATE TABLE IF NOT EXISTS mto_items (
+CREATE TABLE IF NOT EXISTS manual_mto_data (
   id            SERIAL PRIMARY KEY,
   line_zone_id  INTEGER NOT NULL REFERENCES mto_line_zones(id) ON DELETE CASCADE,
-  spec          VARCHAR(40),
+  piping_class  VARCHAR(40),
   input_code    VARCHAR(60),
   item_code     VARCHAR(60),
-  size          VARCHAR(20),
+  dia1          VARCHAR(20),
   dia2          VARCHAR(20),
   qty           NUMERIC NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS model_dump_data (
   id            SERIAL PRIMARY KEY,
   line_zone_id  INTEGER NOT NULL REFERENCES mto_line_zones(id) ON DELETE CASCADE,
-  spec          VARCHAR(40),
+  piping_class  VARCHAR(40),
   input_code    VARCHAR(60),
   item_code     VARCHAR(60),
-  size          VARCHAR(20),
+  dia1          VARCHAR(20),
   dia2          VARCHAR(20),
   qty           NUMERIC NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS sppid_extracted_data (
   id            SERIAL PRIMARY KEY,
   line_zone_id  INTEGER NOT NULL REFERENCES mto_line_zones(id) ON DELETE CASCADE,
-  spec          VARCHAR(40),
+  piping_class  VARCHAR(40),
   input_code    VARCHAR(60),
   item_code     VARCHAR(60),
-  size          VARCHAR(20),
+  dia1          VARCHAR(20),
   dia2          VARCHAR(20),
   qty           NUMERIC NOT NULL DEFAULT 0
 );
@@ -173,7 +190,7 @@ BEGIN
     FROM lines
     ON CONFLICT DO NOTHING;
 
-    FOREACH t IN ARRAY ARRAY['mto_items', 'model_dump_data', 'sppid_extracted_data'] LOOP
+    FOREACH t IN ARRAY ARRAY['manual_mto_data', 'model_dump_data', 'sppid_extracted_data'] LOOP
       IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = t AND column_name = 'line_id') THEN
         EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS line_zone_id INTEGER REFERENCES mto_line_zones(id) ON DELETE CASCADE', t);
         EXECUTE format($q$
@@ -193,7 +210,7 @@ BEGIN
   END IF;
 END $$;
 
-CREATE INDEX IF NOT EXISTS idx_mto_items_zone ON mto_items (line_zone_id);
+CREATE INDEX IF NOT EXISTS idx_manual_mto_data_zone ON manual_mto_data (line_zone_id);
 CREATE INDEX IF NOT EXISTS idx_model_dump_data_zone ON model_dump_data (line_zone_id);
 CREATE INDEX IF NOT EXISTS idx_sppid_extracted_data_zone ON sppid_extracted_data (line_zone_id);
 

@@ -305,7 +305,7 @@ function renderSummaryTable(query) {
    Flow: Service → LSR NO → Subline No. shows the LINE DATA straight away
    (read live from the line list / P&ID — nothing saved). Then the engineer
    picks or adds a Zone and enters MTO; Save writes the line + zone, its COSMAS
-   header and the BoM rows to mto_line_zones (+ mto_items / model_dump_data).
+   header and the BoM rows to mto_line_zones (+ manual_mto_data / model_dump_data).
    Each tab has its own selection; `p` is the element-id prefix ('' or 'dc_').
    Row edits, inserts and deletes stay local until Save (Undo works on them). */
 const COSMAS_KEYS = [

@@ -19,9 +19,9 @@ const ZONE_COLUMNS = `
   bolt_tensioning AS "boltTensioning", status, items_count AS items,
   created_by AS "createdBy", created_at AS "createdAt", updated_by AS "updatedBy", updated_at AS "updatedAt"
 `;
-const ITEM_COLUMNS = `id, spec AS "pipingClass", input_code AS "inputCode", item_code AS "itemCode", size AS dia1, dia2, qty`;
+const ITEM_COLUMNS = `id, piping_class AS "pipingClass", input_code AS "inputCode", item_code AS "itemCode", dia1, dia2, qty`;
 // BoM tables per tab; 'extracted' = SmartPlant P&ID reference (read-only here)
-const ITEM_TABLES = { mto: 'mto_items', dump: 'model_dump_data' };
+const ITEM_TABLES = { mto: 'manual_mto_data', dump: 'model_dump_data' };
 
 const ZONE_RE = /^[A-Z0-9]{1,3}$/;
 function normalizeZone(zone) {
@@ -135,7 +135,7 @@ async function saveZone({ jobNo, unitNo, empId, service, lsrNo, sublineNo, zone,
     await client.query(`DELETE FROM ${table} WHERE line_zone_id = $1`, [saved.id]);
     for (const v of values) {
       await client.query(
-        `INSERT INTO ${table} (line_zone_id, spec, input_code, item_code, size, dia2, qty) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        `INSERT INTO ${table} (line_zone_id, piping_class, input_code, item_code, dia1, dia2, qty) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
         [saved.id, ...v]
       );
     }
