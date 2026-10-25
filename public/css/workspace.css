@@ -447,3 +447,19 @@ input.inline-input:focus { border-color: var(--color-accent); box-shadow: 0 0 0 
 }
 .entry-split.sppid-collapsed .extracted-col .col-head .badge::before { content: "· "; }
 .entry-split.sppid-collapsed .sppid-toggle i { transform: rotate(180deg); }
+
+/* ── Line Information on one line above the header (2026-10-25) ── */
+.line-info-panel { flex-direction: column; gap: 6px; }
+.line-info-panel > .li-divider { width: auto; height: 1px; }
+.li-col-select { flex: none; flex-direction: row; align-items: center; gap: 14px; flex-wrap: wrap; }
+.li-col-select .li-col-title { flex: none; }
+.li-col-select .li-fields { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; }
+.li-col-select .li-fields .field { flex-direction: row; align-items: center; gap: 6px; }
+.li-col-select .li-fields .field-label { margin: 0; white-space: nowrap; }
+.li-col-select .li-fields select { width: auto; }
+#li_service, #dc_li_service { min-width: 90px; }
+#li_unitDisplay, #dc_li_unitDisplay { min-width: 70px; }
+#li_seq, #dc_li_seq { min-width: 100px; }
+#li_subline, #dc_li_subline { min-width: 100px; }
+#li_zone, #dc_li_zone { min-width: 230px; }
+.line-info-panel.cos-collapsed .li-col-select .li-col-title { display: block; }
