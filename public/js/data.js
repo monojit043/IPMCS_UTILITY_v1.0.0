@@ -279,20 +279,7 @@ const DataStore = (() => {
   function getPidDocuments(folderId) {
     return apiFetch(`/pid/folders/${folderId}/documents`);
   }
-  // Live PIMS P&ID sheets for the current job/unit, for ADMIN to tick into a folder.
-  function getAvailablePimsDocuments() {
-    return apiFetch('/pid/pims/available');
-  }
-  function addPidFolderSelection(folderId, masterIndexId) {
-    return apiFetch(`/pid/folders/${folderId}/selections`, {
-      method: 'POST',
-      body: JSON.stringify({ masterIndexId }),
-    });
-  }
-  function removePidFolderSelection(folderId, masterIndexId) {
-    return apiFetch(`/pid/folders/${folderId}/selections/${masterIndexId}`, { method: 'DELETE' });
-  }
-  // Freeze: the folder's P&IDs and their pinned revisions no longer change
+  // Freeze: copies EVERY P&ID of the unit (current revision) into the folder
   function freezePidFolder(folderId) {
     return apiFetch(`/pid/folders/${folderId}/freeze`, { method: 'POST' });
   }
@@ -352,7 +339,7 @@ const DataStore = (() => {
     getServices, getLsrNos, getSublines, getLineData, getZones,
     getLineZones, getLineZone, saveLineZone, getMtoSummary, searchLineZones, deleteLineZone, getTeam, searchEmployees, assignTeamMember, removeTeamMember, getZoneRevisions, getZoneRevision,
     getPidFolders, createPidFolder, getPidDocuments,
-    getAvailablePimsDocuments, addPidFolderSelection, removePidFolderSelection, freezePidFolder,
+    freezePidFolder,
     getPidDocument, getPidDocumentForLine, pidFileUrl, pidRevisionFileUrl, downloadPidCopy, authHeaders,
     getDocumentHighlights, getMyPidHighlights, setMyPidHighlights, getPidZoneBreaks,
   };

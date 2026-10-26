@@ -394,6 +394,20 @@ CREATE TABLE IF NOT EXISTS mto_folder_files (
   UNIQUE (folder_id, master_index_id)
 );
 ALTER TABLE pid_user_highlights ADD COLUMN IF NOT EXISTS folder_file_id INTEGER REFERENCES mto_folder_files(id) ON DELETE CASCADE;
+
+-- Freeze takes EVERY active P&ID of the unit's ePULSE index. One that has no
+-- PDF at that moment is recorded here, so the folder shows what it lacks and
+-- lines drawn on it are flagged "PDF missing".
+CREATE TABLE IF NOT EXISTS mto_folder_missing_pids (
+  id               SERIAL PRIMARY KEY,
+  folder_id        INTEGER NOT NULL REFERENCES pid_folders(id) ON DELETE CASCADE,
+  master_index_id  INTEGER NOT NULL,
+  pid_name         VARCHAR(150) NOT NULL,
+  description      TEXT,
+  reason           VARCHAR(100) NOT NULL,   -- 'No PDF uploaded' / 'PDF file not found on disk'
+  UNIQUE (folder_id, master_index_id)
+);
+ALTER TABLE pid_folders ADD COLUMN IF NOT EXISTS freeze_note TEXT;
 ALTER TABLE pid_zone_breaks ADD COLUMN IF NOT EXISTS folder_file_id INTEGER REFERENCES mto_folder_files(id) ON DELETE CASCADE;
 DO $$
 DECLARE r record;

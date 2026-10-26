@@ -162,6 +162,9 @@ html, body { height: 100%; overflow: hidden; }
 .pid-card-title { font-family: var(--font-display); font-size: 12px; font-weight: 700; color: var(--text-primary); word-break: break-word; }
 .pid-card-sub { font-size: 10px; color: var(--text-muted); }
 .pid-card-dl { display: flex; gap: 6px; margin-top: 4px; }
+.pid-card.pid-missing { opacity: 0.55; cursor: default; border-style: dashed; }
+.pid-card.pid-missing .pid-card-icon { color: var(--text-faint); }
+.drw-flag { color: var(--color-warning, #e8a33d); font-weight: 600; }
 .pid-card-dl button {
   display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; font-size: 10px; cursor: pointer;
   background: var(--color-surface-raised); color: var(--text-secondary);

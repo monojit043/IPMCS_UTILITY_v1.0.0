@@ -39,6 +39,21 @@ async function listAvailable(jobNo, unitNo) {
   return rows;
 }
 
+// The unit's whole P&ID index (active sheets), each with its current
+// revision when ePULSE has a PDF for it (documentId null when it hasn't)
+async function listIndex(jobNo, unitNo) {
+  const { rows } = await queryEpulse(
+    `SELECT ${MASTER_INDEX_COLUMNS}, d.id AS "documentId", d.file_name AS "fileName", d.file_path AS "filePath",
+            d.rev_label AS "revLabel", d.uploaded_by AS "uploadedBy", d.uploaded_at AS "uploadedAt"
+     FROM pid_master_index mi
+     LEFT JOIN pid_documents d ON d.master_index_id = mi.id AND d.status = 'current'
+     WHERE mi.job_no = $1 AND mi.unit_no = $2 AND mi.status = 'active'
+     ORDER BY mi.pid_name`,
+    [jobNo, unitNo]
+  );
+  return rows;
+}
+
 // Resolves one P&ID sheet (master index id) to its current file revision —
 // always live, so a folder automatically reflects the latest revision.
 async function getCurrentDocument(masterIndexId) {
@@ -97,4 +112,4 @@ async function findForLine(jobNo, unitNo, scope, service, seqNo) {
   return null;
 }
 
-module.exports = { uploadPath, listAvailable, getCurrentDocument, getRevision, findForLine };
+module.exports = { uploadPath, listIndex, listAvailable, getCurrentDocument, getRevision, findForLine };

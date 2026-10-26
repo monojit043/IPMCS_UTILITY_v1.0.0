@@ -25,6 +25,8 @@ async function loadFolder(folderId) {
   const pinned = new Map();
   sel.forEach((s) => { const n = nameOf.get(s.documentId); if (n) pinned.set(n, s); });
   f.drawings = { docIds: sel.map((s) => s.documentId), pidNames: [...pinned.keys()], pinned };
+  const { rows: miss } = await query(`SELECT pid_name FROM mto_folder_missing_pids WHERE folder_id = $1`, [folderId]);
+  f.missingPidNames = miss.map((m) => m.pid_name);   // in the index, no PDF at Freeze
   f.scope = await latestScope(f.jobNo);
   return f;
 }

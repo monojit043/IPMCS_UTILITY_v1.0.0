@@ -1,5 +1,6 @@
 const { query, queryEpulse } = require('../config/db');
 const lineData = require('./lineData.service');
+const { drawingStatus } = require('./drawingStatus');
 const summary = require('./summary.service');
 const { namesFor } = require('./auth.service');
 
@@ -51,7 +52,7 @@ async function zonesWithLines(jobNo, unitNo, folder) {
   const data = await lineData.getLineDataBulk(jobNo, unitNo, folder.scope, keys);
   const lines = zones.map((z) => data.get(`${z.service}|${z.lsrNo}|${z.sublineNo || ''}`) || null);
   const bases = await lineData.getBasisBulk(jobNo, lines, folder.scope);
-  return zones.map((z, i) => ({ ...z, line: lines[i], liveBasis: bases[i] }));
+  return zones.map((z, i) => ({ ...z, line: lines[i], liveBasis: bases[i], drawing: drawingStatus(lines[i], folder) }));
 }
 
 async function bomRows(jobNo, unitNo, folder, table) {
@@ -63,12 +64,12 @@ async function bomRows(jobNo, unitNo, folder, table) {
      WHERE z.job_no = $1 AND z.unit_no = $2 AND z.folder_id = $3 ORDER BY z.service, z.lsr_no, z.subline_no, z.zone, i.id`,
     [jobNo, unitNo, folder.id]
   );
-  const header = ['Job', 'Unit', 'MTO folder', 'Line Key (COSMAS)', 'Line No', 'Service', 'LSR NO', 'Subline No', 'Zone',
+  const header = ['Job', 'Unit', 'MTO folder', 'Drawing in folder', 'Line Key (COSMAS)', 'Line No', 'Service', 'LSR NO', 'Subline No', 'Zone',
     'Contr.Code', 'DRG Indicator', 'DRG Area No', 'DRG Rev No', 'Batch No', 'Batch Rev No',
     'Piping Class', 'Input Code', 'Item Code', 'Dia1', 'Dia2', 'Qty', 'Rev', 'Saved by', 'Saved at'];
   const out = rows.map((r) => {
     const z = byId.get(r.zid);
-    return [z.jobNo, z.unitNo, folder.name, lineKey(z), z.line ? z.line.lineNo : '', z.service, z.lsrNo, z.sublineNo, z.zone,
+    return [z.jobNo, z.unitNo, folder.name, z.drawing.label, lineKey(z), z.line ? z.line.lineNo : '', z.service, z.lsrNo, z.sublineNo, z.zone,
       z.contrCode, z.drgIndicator, z.drgAreaNo, z.drgRevNo, z.batchNo, z.batchRevNo,
       r.piping_class, r.input_code, r.item_code, r.dia1, r.dia2, r.qty, z.revNo, z.updatedBy, z.updatedAt];
   });
@@ -80,7 +81,7 @@ async function zoneStatus(jobNo, unitNo, folder) {
   const { rows: plan } = await queryEpulse(`SELECT service, seq_no, upper(zone) AS zone FROM piping_line_list WHERE job_no = $1 AND unit_no = $2`, [jobNo, unitNo]);
   const planned = new Set(plan.map((p) => `${p.service}|${p.seq_no}|${p.zone}`));
   const names = await namesFor(zones.map((z) => z.updatedBy));
-  const header = ['Line No', 'Service', 'LSR NO', 'Subline No', 'Zone', 'In zone plan', 'Status', 'MTO rows', 'Model dump rows',
+  const header = ['Line No', 'Service', 'LSR NO', 'Subline No', 'Zone', 'Drawing in folder', 'In zone plan', 'Status', 'MTO rows', 'Model dump rows',
     'Line Key (COSMAS)', 'Size', 'Piping Class', 'INS Type', 'Des Press', 'Des Temp', 'P&ID (latest rev)', 'Picked from',
     'Last rev', 'Last saved by', 'Last saved at', 'Line data changed since last save'];
   const rows = zones.map((z) => {
@@ -88,7 +89,7 @@ async function zoneStatus(jobNo, unitNo, folder) {
     const changes = !z.basis ? 'no revision yet'
       : !z.line ? 'line no longer in line list / P&IDs'
       : lineData.compareBasis(z.basis, z.liveBasis).map((c) => `${c.label}: ${c.was ?? '—'} → ${c.now ?? '—'}`).join('; ');
-    return [z.line ? z.line.lineNo : '', z.service, z.lsrNo, z.sublineNo, z.zone,
+    return [z.line ? z.line.lineNo : '', z.service, z.lsrNo, z.sublineNo, z.zone, z.drawing.label,
       plan.length ? (planned.has(`${z.service}|${seq}|${z.zone}`) ? 'Yes' : 'No') : 'no plan',
       STATUS[z.status] || z.status, z.items, z.dumpRows, lineKey(z),
       z.line?.sizeIn, z.line?.pipingSpec, z.line?.insulationType, z.line?.designPressure, z.line?.designTemp,
@@ -113,7 +114,7 @@ async function overview(jobNo, unitNo, folder) {
       id: z.id, lineNo: z.line ? z.line.lineNo : null, service: z.service, lsrNo: z.lsrNo, sublineNo: z.sublineNo, zone: z.zone,
       lineKey: lineKey(z), status: z.status, items: z.items, dumpRows: z.dumpRows,
       sizeIn: z.line?.sizeIn || null, pipingSpec: z.line?.pipingSpec || null,
-      pids: pidsText(z.liveBasis?.pids), inPlan: plan.length ? planned.has(`${z.service}|${seq}|${z.zone}`) : null,
+      pids: pidsText(z.liveBasis?.pids), drawing: z.drawing, inPlan: plan.length ? planned.has(`${z.service}|${seq}|${z.zone}`) : null,
       revNo: z.revNo, savedBy: z.updatedBy, savedByName: names.get(String(z.updatedBy || '').toUpperCase()) || z.updatedBy,
       savedAt: z.updatedAt, createdBy: z.createdBy, changes,
     };

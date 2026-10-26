@@ -738,10 +738,7 @@
                   <span class="pane-title" id="pidFolderTitle">Folder</span>
                   <span class="badge badge-muted" id="pidDocCountBadge">0 P&amp;IDs</span>
                   <span class="badge" id="pidFolderStatusBadge"></span>
-                  <button class="btn btn-primary btn-sm" id="pidSelectBtn" style="display:none">
-                    <i class="ti ti-list-check"></i>Select P&amp;IDs
-                  </button>
-                  <button class="btn btn-primary btn-sm" id="pidFreezeBtn" style="display:none" title="Fix this folder's P&amp;IDs at their current revisions — MTO can then be taken in it">
+                  <button class="btn btn-primary btn-sm" id="pidFreezeBtn" style="display:none" title="Copy EVERY P&amp;ID of the unit at its current revision into this folder — MTO can then be taken in it">
                     <i class="ti ti-lock"></i>Freeze
                   </button>
                 </div>
@@ -923,7 +920,7 @@
           <thead><tr>
             <th>Line No</th><th>Service</th><th>LSR NO</th><th>Sub</th><th>Zone</th><th>Line Key</th>
             <th style="text-align:right">MTO rows</th><th style="text-align:right">Dump rows</th><th>Status</th><th>Rev</th>
-            <th>Saved by</th><th>Saved at</th><th>In plan</th><th>Changed</th><th style="text-align:right">Actions</th>
+            <th>Saved by</th><th>Saved at</th><th>Drawing</th><th>In plan</th><th>Changed</th><th style="text-align:right">Actions</th>
           </tr></thead>
           <tbody id="linesTbody"></tbody>
         </table>
@@ -1012,25 +1009,6 @@
   </div>
 </div>
 
-<!-- SELECT P&IDs FROM PIMS MODAL (ADMIN) -->
-<div class="modal-overlay" id="pidSelectDocModal">
-  <div class="modal">
-    <div class="modal-header">
-      <i class="ti ti-list-check" style="font-size:18px;color:var(--color-warning)"></i>
-      <div class="modal-title">Select P&amp;IDs</div>
-      <div class="modal-close" id="closePidSelectModal"><i class="ti ti-x"></i></div>
-    </div>
-    <div class="modal-body">
-      <div style="font-size:11px;color:var(--text-secondary);margin-bottom:10px">
-        Live P&amp;ID sheets from PIMS for this job/unit — tick the ones required for MTO.
-      </div>
-      <div id="pidSelectList" style="display:flex;flex-direction:column;gap:6px;max-height:320px;overflow:auto"></div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" id="cancelPidSelectModal">Close</button>
-    </div>
-  </div>
-</div>
 
 <!-- ASSIGNMENT SELECTION (blocks the workspace behind it until resolved) -->
 <div class="modal-overlay" id="assignmentModal">

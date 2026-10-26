@@ -1,5 +1,6 @@
 const { query, queryEpulse } = require('../config/db');
 const lineData = require('./lineData.service');
+const { drawingStatus } = require('./drawingStatus');
 
 // MTO progress of one MTO folder: ePULSE's zone PLAN (piping_line_list, made
 // in ePULSE → Create Piping Line List → zone allocation) for the unit's lines
@@ -40,6 +41,12 @@ async function getSummary(jobNo, unitNo, folder) {
     taken.get(k).add(z.zone);
   });
 
+  // MTO taken on a line whose drawing isn't in the folder (allowed, flagged)
+  const takenZones = done.filter((z) => z.items_count > 0);
+  const data = await lineData.getLineDataBulk(jobNo, unitNo, folder.scope,
+    takenZones.map((z) => ({ service: z.service, lsrNo: z.lsr_no, sublineNo: z.subline_no })));
+  const noDrawing = takenZones.filter((z) => !drawingStatus(data.get(`${z.service}|${z.lsr_no}|${z.subline_no || ''}`), folder).ok).length;
+
   let started = 0, complete = 0;
   for (const [k, zones] of planned) {
     const t = taken.get(k);
@@ -73,7 +80,7 @@ async function getSummary(jobNo, unitNo, folder) {
 
   return {
     hasPlan: unitPlan.length > 0,
-    folder: { id: folder.id, name: folder.name, pids: folder.drawings.pidNames.length },
+    folder: { id: folder.id, name: folder.name, pids: folder.drawings.pidNames.length, missingPids: folder.missingPidNames.length },
     lines: {
       inSources: src.n,                 // lines in the line list + latest P&IDs
       planned: planned.size,            // lines with at least one zone in the plan
@@ -87,6 +94,7 @@ async function getSummary(jobNo, unitNo, folder) {
       left: [...zones.values()].reduce((s, r) => s + r.left, 0),
       notInPlan: notInPlanZones,
       savedWithoutRows: done.filter((z) => !z.items_count).length,
+      takenWithoutDrawing: noDrawing,   // line + zones with MTO whose drawing isn't in the folder
     },
     zones: [...zones.values()].sort((a, b) => a.zone.localeCompare(b.zone)),
   };

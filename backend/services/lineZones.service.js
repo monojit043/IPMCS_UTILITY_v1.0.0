@@ -1,5 +1,6 @@
 const { pool, query, queryEpulse } = require('../config/db');
 const lineData = require('./lineData.service');
+const { drawingStatus } = require('./drawingStatus');
 
 // mto_line_zones: what an engineer saves for one line + zone — the COSMAS
 // header and the BoM rows (manual MTO / model dump), never the line data.
@@ -138,7 +139,7 @@ async function getZoneFull(id, folder) {
       : [{ field: 'line', label: 'Line', was: last.basis.lineNo, now: 'no longer in the line list / latest P&IDs' }];
   }
   const lastRev = last ? (({ basis, ...rest }) => rest)(last) : null;
-  return { zone, line, mto, dump, extracted, lastRevision: lastRev, basisChanges };
+  return { zone, line, drawing: drawingStatus(line, folder), mto, dump, extracted, lastRevision: lastRev, basisChanges };
 }
 
 // Revision history of a zone (newest first) and one revision in full
@@ -173,6 +174,7 @@ async function saveZone({ jobNo, unitNo, empId, folder, service, lsrNo, sublineN
   const values = cleanRows(rows);
   const basis = await lineData.getBasis(jobNo, line, folder.scope);   // what this save is based on
   basis.folder = { id: folder.id, name: folder.name };
+  basis.drawing = drawingStatus(line, folder);   // was the drawing in the folder when this was saved
 
   const cols = Object.keys(h);
   const client = await pool.connect();

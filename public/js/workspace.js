@@ -157,7 +157,7 @@ async function populateFolders() {
   if (!currentFolder()) DataStore.setFolder(mtoFolders.length ? mtoFolders[0].id : null);
   const sel = document.getElementById('folderSelect');
   sel.innerHTML = mtoFolders.length
-    ? mtoFolders.map(f => `<option value="${f.id}">${escAttr(f.name)} (${f.documentCount} P&amp;IDs)</option>`).join('')
+    ? mtoFolders.map(f => `<option value="${f.id}">${escAttr(f.name)} (${f.fileCount} P&amp;IDs)</option>`).join('')
     : '<option value="">None frozen yet</option>';
   sel.value = DataStore.getFolder() || '';
   sel.disabled = mtoFolders.length < 2;
@@ -371,6 +371,8 @@ function renderMtoProgress(s) {
         ${s.zones.length ? `<tfoot><tr><td>Total</td><td class="td-num">${Z.planned}</td><td class="td-num">${Z.taken}</td><td class="td-num">${Z.left}</td><td class="td-num">${Z.notInPlan}</td></tr></tfoot>` : ''}
       </table>
       ${Z.savedWithoutRows ? `<div class="mp-note">${Z.savedWithoutRows} zone(s) saved with no MTO rows are not counted as taken.</div>` : ''}
+      ${Z.takenWithoutDrawing ? `<div class="mp-note drw-flag">⚠ ${Z.takenWithoutDrawing} line + zone(s) have MTO taken but their drawing is not in this folder — see Lines window / Zone status report.</div>` : ''}
+      ${s.folder.missingPids ? `<div class="mp-note">${s.folder.missingPids} P&amp;ID(s) of the index had no PDF when this folder was frozen.</div>` : ''}
     </div>`;
   box.innerHTML = linesCard + zonesCard;
 }
@@ -524,12 +526,12 @@ let linesAll = [], linesCtrl = null;
 async function openLinesModal(ctrl) {
   linesCtrl = ctrl;
   document.getElementById('linesTitle').textContent = `Lines — MTO taken · ${currentUser.jobNo || ''} · Unit ${DataStore.getUnit() || '—'} · ${folderLabel()}`;
-  document.getElementById('linesTbody').innerHTML = '<tr><td colspan="15" style="padding:14px;color:var(--text-faint)">Loading…</td></tr>';
+  document.getElementById('linesTbody').innerHTML = '<tr><td colspan="16" style="padding:14px;color:var(--text-faint)">Loading…</td></tr>';
   document.getElementById('linesModal').classList.add('open');
   try {
     linesAll = await DataStore.searchLineZones();
   } catch (err) {
-    document.getElementById('linesTbody').innerHTML = `<tr><td colspan="15" style="padding:14px;color:var(--color-danger)">${escAttr(err.message)}</td></tr>`;
+    document.getElementById('linesTbody').innerHTML = `<tr><td colspan="16" style="padding:14px;color:var(--color-danger)">${escAttr(err.message)}</td></tr>`;
     return;
   }
   const fill = (id, values, first) => {
@@ -569,13 +571,14 @@ function renderLines() {
       <td class="td-num">${l.items}</td><td class="td-num">${l.dumpRows}</td><td>${STATUS_BADGE[l.status] || escAttr(l.status)}</td>
       <td>${l.revNo ? 'Rev ' + l.revNo : '—'}</td><td title="${escAttr(l.savedBy)}">${escAttr(l.savedByName || '—')}</td>
       <td>${l.savedAt ? new Date(l.savedAt).toLocaleString() : '—'}</td>
+      <td>${!l.drawing ? '—' : l.drawing.ok ? 'Yes' : `<span class="drw-flag" title="${escAttr(l.drawing.label + (l.drawing.pids.length ? ': ' + l.drawing.pids.join(', ') : ''))}">⚠ ${escAttr(l.drawing.label)}</span>`}</td>
       <td>${l.inPlan === null ? '—' : l.inPlan ? 'Yes' : 'No'}</td>
       <td>${l.changes.length ? `<span class="chg" title="${escAttr(changesText(l))}">⚠ ${l.changes.length}</span>` : '—'}</td>
       <td class="td-acts">
         <div class="tool-btn" data-open-id="${l.id}" title="Open in the MTO tab"><i class="ti ti-arrow-right"></i></div>
         ${canDelete ? `<div class="tool-btn" data-del-id="${l.id}" title="Delete this line + zone (archived)" style="color:var(--color-danger)"><i class="ti ti-trash"></i></div>` : ''}
       </td></tr>`;
-  }).join('') || '<tr><td colspan="15" style="padding:14px;color:var(--text-faint)">No line + zones match</td></tr>';
+  }).join('') || '<tr><td colspan="16" style="padding:14px;color:var(--text-faint)">No line + zones match</td></tr>';
 }
 
 async function deleteLineZone(id) {
@@ -925,8 +928,12 @@ function createMtoController(cfg) {
       ? `${d.lineNo} · ${d.pipingSpec || '—'} · Des ${d.designPressure || '—'} / ${d.designTemp || '—'}`
       : '';
     const note = byId('ld_line');
-    note.textContent = d && d.dataMismatch ? `⚠ Line list and P&ID differ — line list used: ${d.dataMismatch}` : '';
-    note.style.display = d && d.dataMismatch ? 'block' : 'none';
+    const msgs = [
+      d && d.drawing && !d.drawing.ok && `⚠ Drawing not in MTO folder ${folderLabel()} (${d.drawing.label}${d.drawing.pids.length ? ': ' + d.drawing.pids.join(', ') : ''}) — MTO can be saved but is flagged; no frozen copy to highlight on`,
+      d && d.dataMismatch && `⚠ Line list and P&ID differ — line list used: ${d.dataMismatch}`,
+    ].filter(Boolean);
+    note.textContent = msgs.join('  ·  ');
+    note.style.display = msgs.length ? 'block' : 'none';
   }
 
   // Footer: the line + zone being worked on and its last save (active tab only)
@@ -1458,7 +1465,6 @@ function initPidLibrary() {
   pidOverlayCtx = pidOverlayCanvas.getContext('2d');
 
   document.getElementById('pidNewFolderBtn').addEventListener('click', openPidFolderModal);
-  document.getElementById('pidSelectBtn').addEventListener('click', openPidSelectModal);
   document.getElementById('pidFreezeBtn').addEventListener('click', freezePidFolder);
   document.getElementById('pidBackToFoldersBtn').addEventListener('click', showPidFolders);
   document.getElementById('pidBackToDocsBtn').addEventListener('click', () => openPidFolder(pidActiveFolder));
@@ -1474,8 +1480,6 @@ function initPidLibrary() {
   document.getElementById('closePidFolderModal').addEventListener('click', closePidFolderModal);
   document.getElementById('cancelPidFolderModal').addEventListener('click', closePidFolderModal);
 
-  document.getElementById('closePidSelectModal').addEventListener('click', closePidSelectModal);
-  document.getElementById('cancelPidSelectModal').addEventListener('click', closePidSelectModal);
 }
 
 function pidView(name) {
@@ -1506,7 +1510,7 @@ async function showPidFolders() {
     <div class="pid-card" data-folder-id="${f.id}">
       <i class="ti ${f.status === 'frozen' ? 'ti-folder-check' : 'ti-folder'} pid-card-icon"></i>
       <div class="pid-card-title">${escAttr(f.name)}</div>
-      <div class="pid-card-sub">${f.documentCount} P&amp;ID${f.documentCount === 1 ? '' : 's'} · ${folderStatusText(f)}</div>
+      <div class="pid-card-sub">${f.status === 'frozen' ? `${f.fileCount} P&amp;ID${f.fileCount === 1 ? '' : 's'} copied${f.missingCount ? ` · ${f.missingCount} without PDF` : ''}` : 'Freeze takes all P&amp;IDs'} · ${folderStatusText(f)}</div>
     </div>
   `).join('');
   grid.querySelectorAll('.pid-card').forEach(card => {
@@ -1519,21 +1523,20 @@ async function showPidFolders() {
 
 function folderStatusText(f) {
   return f.status === 'frozen'
-    ? `Frozen${f.frozenBy ? ' by ' + escAttr(f.frozenBy) : ''}${f.frozenAt ? ' on ' + new Date(f.frozenAt).toLocaleDateString('en-IN') : ''}`
+    ? `Frozen${f.frozenBy ? ' by ' + escAttr(f.frozenBy) : ''}${f.frozenAt ? ' on ' + new Date(f.frozenAt).toLocaleDateString('en-IN') : ''}${f.freezeNote ? ' · ' + escAttr(f.freezeNote) : ''}`
     : 'Open — not frozen yet';
 }
 
 async function openPidFolder(folder) {
   pidActiveFolder = folder;
   pidView('pidDocumentsView');
-  // Lead or Material Lead of the unit edit the P&ID list — only until it's frozen
+  // Lead or Material Lead of the unit freezes it (Freeze takes every P&ID — no picking)
   const isAdmin = canManage() && folder.status !== 'frozen';
-  document.getElementById('pidSelectBtn').style.display = isAdmin ? 'inline-flex' : 'none';
   document.getElementById('pidFreezeBtn').style.display = isAdmin ? 'inline-flex' : 'none';
   document.getElementById('pidFolderTitle').textContent = folder.name;
   const badge = document.getElementById('pidFolderStatusBadge');
   badge.className = 'badge ' + (folder.status === 'frozen' ? 'badge-success' : 'badge-accent');
-  badge.innerHTML = folder.status === 'frozen' ? '<i class="ti ti-lock"></i>' + folderStatusText(folder) : 'Open — freeze to start MTO';
+  badge.innerHTML = folder.status === 'frozen' ? '<i class="ti ti-lock"></i>' + folderStatusText(folder) : 'Open — preview of what Freeze will copy';
 
   try {
     pidDocs = await DataStore.getPidDocuments(folder.id);
@@ -1545,15 +1548,21 @@ async function openPidFolder(folder) {
 }
 
 function renderPidDocGrid(isAdmin) {
-  document.getElementById('pidDocCountBadge').textContent = pidDocs.length + ' P&IDs';
+  const withPdf = pidDocs.filter(d => !d.missing).length, missing = pidDocs.length - withPdf;
+  document.getElementById('pidDocCountBadge').textContent = `${withPdf} P&IDs${missing ? ` · ${missing} without PDF` : ''}`;
   const grid = document.getElementById('pidDocGrid');
   if (!pidDocs.length) {
-    grid.innerHTML = `<div class="pid-empty-hint">No P&amp;IDs selected into this folder yet${isAdmin ? ' — select one from PIMS to get started.' : '.'}</div>`;
+    grid.innerHTML = `<div class="pid-empty-hint">No P&amp;IDs in this unit's ePULSE index yet.</div>`;
     return;
   }
   // Frozen folder: its own copies (kept in IPMCS) — fresh + highlighted PDF.
   // Open folder: the current ePULSE revision Freeze will copy.
-  grid.innerHTML = pidDocs.map(d => `
+  grid.innerHTML = pidDocs.map(d => d.missing ? `
+    <div class="pid-card pid-missing" title="In the P&amp;ID index but ${escAttr(d.reason)}${pidActiveFolder.status === 'frozen' ? ' when the folder was frozen' : ''} — lines drawn on it are flagged">
+      <i class="ti ti-file-off pid-card-icon"></i>
+      <div class="pid-card-title">${escAttr(d.pidName)}</div>
+      <div class="pid-card-sub">${escAttr(d.reason)}</div>
+    </div>` : `
     <div class="pid-card" data-master-index-id="${d.masterIndexId}">
       <i class="ti ti-file-type-pdf pid-card-icon"></i>
       <div class="pid-card-title">${escAttr(d.pidName)}</div>
@@ -1572,7 +1581,7 @@ function renderPidDocGrid(isAdmin) {
       try { await DataStore.downloadPidCopy(doc.fileId, btn.dataset.dl); } catch (err) { showToast('error', 'Could not download', err.message); }
     });
   });
-  grid.querySelectorAll('.pid-card').forEach(card => {
+  grid.querySelectorAll('.pid-card:not(.pid-missing)').forEach(card => {
     card.addEventListener('click', () => {
       const doc = pidDocs.find(d => d.masterIndexId === Number(card.dataset.masterIndexId));
       openPidDocument(doc);
@@ -1802,30 +1811,14 @@ async function submitPidFolder(e) {
   }
 }
 
-// ADMIN ticks which live PIMS P&ID sheets (for the current job/unit) belong
-// in the open folder — PIMS stays the source of truth, this only records
-// the selection.
-async function openPidSelectModal() {
-  document.getElementById('pidSelectDocModal').classList.add('open');
-  const list = document.getElementById('pidSelectList');
-  list.innerHTML = `<div class="pid-empty-hint">Loading…</div>`;
-  try {
-    const [available, selectedIds] = await Promise.all([
-      DataStore.getAvailablePimsDocuments(),
-      Promise.resolve(pidDocs.map(d => d.masterIndexId)),
-    ]);
-    renderPidSelectList(available, selectedIds);
-  } catch (err) {
-    list.innerHTML = `<div class="pid-empty-hint">Could not load PIMS P&amp;IDs: ${err.message}</div>`;
-  }
-}
 async function freezePidFolder() {
   const f = pidActiveFolder;
-  if (!pidDocs.length) { showToast('error', 'Nothing to freeze', 'Select at least one P&ID first'); return; }
-  if (!confirm(`Freeze MTO folder "${f.name}" with ${pidDocs.length} P&ID(s)?\n\nThe current revision of each P&ID is copied into IPMCS. After freezing its P&IDs can't be added, removed or moved to a newer revision — newer revisions go into the next MTO folder. Job engineers can then take MTO and highlight on these copies.`)) return;
+  const withPdf = pidDocs.filter(d => !d.missing).length, missing = pidDocs.length - withPdf;
+  if (!withPdf) { showToast('error', 'Nothing to freeze', 'No P&ID of this unit has a PDF in ePULSE yet'); return; }
+  if (!confirm(`Freeze MTO folder "${f.name}"?\n\nEvery P&ID of the unit is taken as it is now:\n  • ${withPdf} P&ID(s) with a PDF — the current revision is copied into IPMCS\n  • ${missing} P&ID(s) in the index without a PDF — recorded as missing; lines on them are flagged\n\nAfter freezing nothing in the folder changes — newer revisions and newly uploaded PDFs go into the next MTO folder. Job engineers can then take MTO and highlight on these copies.`)) return;
   try {
     const frozen = await DataStore.freezePidFolder(f.id);
-    showToast('success', `${f.name} frozen`, 'MTO can now be taken in this folder');
+    showToast('success', `${f.name} frozen`, `${frozen.fileCount} P&ID(s) copied, ${frozen.missingCount} without PDF — MTO can now be taken`);
     const before = DataStore.getFolder();
     await populateFolders();
     // the unit's first frozen folder: start working in it straight away
@@ -1836,42 +1829,6 @@ async function freezePidFolder() {
   }
 }
 
-function closePidSelectModal() {
-  document.getElementById('pidSelectDocModal').classList.remove('open');
-}
-function renderPidSelectList(available, selectedIds) {
-  const list = document.getElementById('pidSelectList');
-  if (!available.length) {
-    list.innerHTML = `<div class="pid-empty-hint">No active P&amp;IDs in PIMS for this job/unit yet.</div>`;
-    return;
-  }
-  const selected = new Set(selectedIds);
-  list.innerHTML = available.map(d => `
-    <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--color-surface-raised);border:1px solid var(--color-border-strong);border-radius:var(--radius-md);cursor:pointer">
-      <input type="checkbox" data-master-index-id="${d.masterIndexId}" ${selected.has(d.masterIndexId) ? 'checked' : ''}/>
-      <div style="flex:1">
-        <div style="font-size:13px;color:var(--text-primary);font-weight:500">${d.pidName}</div>
-        <div style="font-size:11px;color:var(--text-secondary)">Rev ${d.revLabel || '—'} · ${d.fileName}</div>
-      </div>
-    </label>
-  `).join('');
-  list.querySelectorAll('input[type=checkbox]').forEach(cb => {
-    cb.addEventListener('change', () => togglePidSelection(Number(cb.dataset.masterIndexId), cb.checked));
-  });
-}
-async function togglePidSelection(masterIndexId, checked) {
-  try {
-    if (checked) {
-      await DataStore.addPidFolderSelection(pidActiveFolder.id, masterIndexId);
-    } else {
-      await DataStore.removePidFolderSelection(pidActiveFolder.id, masterIndexId);
-    }
-    pidDocs = await DataStore.getPidDocuments(pidActiveFolder.id);
-    renderPidDocGrid(true);
-  } catch (err) {
-    showToast('error', 'Could not update selection', err.message);
-  }
-}
 
 /* ══════════════ ADD ITEM MODAL (shared by both controllers) ══════════════ */
 function openAddModal(ctrl) {

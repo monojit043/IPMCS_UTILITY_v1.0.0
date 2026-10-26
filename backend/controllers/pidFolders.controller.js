@@ -28,18 +28,10 @@ function assertOpen(folder) {
 async function freeze(req, res) {
   const folder = await ownFolder(req);
   assertOpen(folder);
-  if (!folder.documentCount) throw new HttpError(400, 'Add at least one P&ID before freezing the folder');
-  // each P&ID at its revision current NOW, with its PDF read from ePULSE
-  const sel = await foldersService.getSelections(folder.id);
-  const docs = await Promise.all(sel.map(async (s) => {
-    const doc = await pimsPid.getCurrentDocument(s.masterIndexId);
-    return { s, doc, pdf: doc ? folderFiles.readRevisionPdf(doc) : null };
-  }));
-  const bad = docs.filter((d) => !d.doc || !d.pdf);
-  if (bad.length) {
-    throw new HttpError(409, `Can't freeze — no current PDF in ePULSE for: ${bad.map((d) => (d.doc ? d.doc.pidName : `P&ID #${d.s.masterIndexId}`)).join(', ')}`);
-  }
-  if (!(await foldersService.freeze(folder.id, req.user.empId, docs))) throw new HttpError(409, 'This folder was frozen meanwhile');
+  // every P&ID of the unit's index, each at its revision current NOW
+  const { docs, missing } = await folderFiles.gatherAll(req.user.jobNo, req.user.unitNo);
+  if (!docs.length) throw new HttpError(400, 'No P&ID of this unit has a PDF in ePULSE yet — nothing to freeze');
+  if (!(await foldersService.freeze(folder.id, req.user.empId, docs, missing))) throw new HttpError(409, 'This folder was frozen meanwhile');
   const [out] = await foldersService.getAll(req.user.jobNo, req.user.unitNo).then((all) => all.filter((f) => f.id === folder.id));
   res.json(out);
 }
@@ -53,42 +45,24 @@ async function create(req, res) {
   res.status(201).json(folder);
 }
 
-// Open folder: each selected P&ID at its CURRENT ePULSE revision (what Freeze
-// will copy). Frozen folder: its own copies kept in IPMCS (fileId), with
-// newerRev set when ePULSE has a newer revision since (for the next folder).
+// Open folder: a preview of what Freeze will take — every P&ID of the
+// unit's index at its CURRENT ePULSE revision (missing: true when it has no
+// PDF). Frozen folder: its own copies kept in IPMCS (fileId) with newerRev
+// when ePULSE has a newer revision since, plus the P&IDs that had no PDF.
 async function listDocuments(req, res) {
   const folder = await ownFolder(req);
   if (folder.status === 'frozen') {
-    const files = await folderFiles.listFiles(folder.id);
+    const [files, missing] = await Promise.all([folderFiles.listFiles(folder.id), folderFiles.listMissing(folder.id)]);
     const out = await Promise.all(files.map(async (f) => {
       const d = await pimsPid.getRevision(f.documentId);
       return { ...f, uploadedBy: d && d.uploadedBy, uploadedAt: d && d.uploadedAt, newerRev: await foldersService.newerRevision(f.masterIndexId, f.documentId) };
     }));
-    return res.json(out);
+    return res.json([...out, ...missing.map((m) => ({ ...m, missing: true }))]);
   }
-  const sel = await foldersService.getSelections(folder.id);
-  const docs = await Promise.all(sel.map((s) => pimsPid.getCurrentDocument(s.masterIndexId)));
-  res.json(docs.filter(Boolean));
+  const index = await pimsPid.listIndex(req.user.jobNo, req.user.unitNo);
+  res.json(index.map((e) => (e.documentId ? e : { ...e, missing: true, reason: 'No PDF uploaded' })));
 }
 
-async function addSelection(req, res) {
-  assertOpen(await ownFolder(req));
-  const masterIndexId = Number(req.body.masterIndexId);
-  if (!masterIndexId) throw new HttpError(400, 'masterIndexId is required');
-  const doc = await pimsPid.getCurrentDocument(masterIndexId);
-  if (!doc) throw new HttpError(404, 'No current document for that P&ID');
-  if (doc.jobNo !== req.user.jobNo || doc.unitNo !== req.user.unitNo) {
-    throw new HttpError(400, `${doc.pidName} belongs to ${doc.jobNo} / ${doc.unitNo}, not this unit`);
-  }
-  // pinned at today's current revision
-  await foldersService.addSelection(req.params.folderId, masterIndexId, doc.documentId, doc.revLabel, req.user.empId);
-  res.status(201).json(doc);
-}
 
-async function removeSelection(req, res) {
-  assertOpen(await ownFolder(req));
-  await foldersService.removeSelection(req.params.folderId, req.params.masterIndexId);
-  res.status(204).end();
-}
 
-module.exports = { list, create, freeze, listDocuments, addSelection, removeSelection };
+module.exports = { list, create, freeze, listDocuments };

@@ -3,10 +3,6 @@ const pimsPid = require('../services/pimsPid.service');
 const folderFiles = require('../services/folderFiles.service');
 const { newerRevision } = require('../services/pidFolders.service');
 
-async function listAvailable(req, res) {
-  res.json(await pimsPid.listAvailable(req.user.jobNo, req.user.unitNo));
-}
-
 // A drawing revision (ePULSE pid_documents.id) of the user's job + unit — the
 // preview of an OPEN folder's P&IDs, read from ePULSE
 async function ownRevision(req) {
@@ -64,4 +60,4 @@ async function getForLine(req, res) {
   res.json(file);
 }
 
-module.exports = { listAvailable, getRevision, streamRevision, getFile, streamFile, getForLine };
+module.exports = { getRevision, streamRevision, getFile, streamFile, getForLine };

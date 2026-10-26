@@ -23,6 +23,35 @@ function readRevisionPdf(doc) {
   return fs.readFileSync(full);
 }
 
+// What Freeze takes: every active P&ID of the unit's index — those with a
+// PDF now as { doc, pdf }, the rest as missing (with the reason)
+async function gatherAll(jobNo, unitNo) {
+  const index = await pimsPid.listIndex(jobNo, unitNo);
+  const docs = [], missing = [];
+  for (const e of index) {
+    if (!e.documentId) { missing.push({ ...e, reason: 'No PDF uploaded' }); continue; }
+    const pdf = readRevisionPdf(e);
+    if (pdf) docs.push({ doc: e, pdf }); else missing.push({ ...e, reason: 'PDF file not found on disk' });
+  }
+  return { docs, missing };
+}
+
+async function recordMissing(client, folderId, missing) {
+  for (const m of missing) {
+    await client.query(
+      `INSERT INTO mto_folder_missing_pids (folder_id, master_index_id, pid_name, description, reason)
+       VALUES ($1,$2,$3,$4,$5) ON CONFLICT (folder_id, master_index_id) DO NOTHING`,
+      [folderId, m.masterIndexId, m.pidName, m.description || null, m.reason]);
+  }
+}
+
+async function listMissing(folderId) {
+  const { rows } = await query(
+    `SELECT master_index_id AS "masterIndexId", pid_name AS "pidName", description, reason
+     FROM mto_folder_missing_pids WHERE folder_id = $1 ORDER BY pid_name`, [folderId]);
+  return rows;
+}
+
 // Copies the given revisions into a folder (inside the caller's transaction)
 async function copyIn(client, folderId, docs, empId) {
   for (const { doc, pdf } of docs) {
@@ -85,4 +114,4 @@ async function refreshHighlighted(fileId) {
   await query(`UPDATE mto_folder_files SET highlighted_pdf = $2, highlighted_at = now() WHERE id = $1`, [fileId, pdf]);
 }
 
-module.exports = { readRevisionPdf, copyIn, listFiles, getFile, fileForRevision, getPdf, refreshHighlighted };
+module.exports = { gatherAll, recordMissing, listMissing, readRevisionPdf, copyIn, listFiles, getFile, fileForRevision, getPdf, refreshHighlighted };

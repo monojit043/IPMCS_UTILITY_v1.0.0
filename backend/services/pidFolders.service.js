@@ -6,7 +6,9 @@ const { namesFor } = require('./auth.service');
 // the name is read live from PC-2.
 const FOLDER_COLUMNS = `
   f.id, f.job_no AS "jobNo", f.unit_no AS "unitNo", f.name, f.created_at AS "createdAt", f.created_by AS "createdByEmpId",
-  f.status, f.frozen_by AS "frozenByEmpId", f.frozen_at AS "frozenAt",
+  f.status, f.frozen_by AS "frozenByEmpId", f.frozen_at AS "frozenAt", f.freeze_note AS "freezeNote",
+  (SELECT COUNT(*) FROM mto_folder_files ff WHERE ff.folder_id = f.id)::int AS "fileCount",
+  (SELECT COUNT(*) FROM mto_folder_missing_pids mp WHERE mp.folder_id = f.id)::int AS "missingCount",
   (SELECT COUNT(*) FROM pid_folder_selections s WHERE s.folder_id = f.id)::int AS "documentCount"
 `;
 
@@ -29,10 +31,23 @@ async function getFolder(id) {
   return rows[0] || null;
 }
 
-// Freezing fixes the folder: each P&ID is pinned at the revision current
-// NOW and its PDF copied into IPMCS (docs = [{ doc, pdf }]); after that the
-// folder's P&IDs don't change. Newer revisions go into the next MTO folder.
-async function freeze(id, empId, docs) {
+// Records docs (copied in, pinned in pid_folder_selections) + missing P&IDs
+async function snapshot(client, id, empId, docs, missing) {
+  for (const { doc } of docs) {
+    await client.query(
+      `INSERT INTO pid_folder_selections (folder_id, pims_master_index_id, document_id, rev_label, added_by)
+       VALUES ($1,$2,$3,$4,$5)
+       ON CONFLICT (folder_id, pims_master_index_id) DO UPDATE SET document_id = $3, rev_label = $4`,
+      [id, doc.masterIndexId, doc.documentId, doc.revLabel, empId]);
+  }
+  await folderFiles.copyIn(client, id, docs, empId);
+  await folderFiles.recordMissing(client, id, missing);
+}
+
+// Freezing fixes the folder: EVERY P&ID of the unit's index at the revision
+// current NOW, its PDF copied into IPMCS (docs = [{ doc, pdf }]); P&IDs with
+// no PDF are recorded as missing. Newer revisions go into the next folder.
+async function freeze(id, empId, docs, missing) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -40,14 +55,34 @@ async function freeze(id, empId, docs) {
       `UPDATE pid_folders SET status = 'frozen', frozen_by = $2, frozen_at = now() WHERE id = $1 AND status = 'open'`,
       [id, empId]);
     if (!rowCount) { await client.query('ROLLBACK'); return false; }
-    for (const { doc } of docs) {
-      await client.query(
-        `UPDATE pid_folder_selections SET document_id = $3, rev_label = $4 WHERE folder_id = $1 AND pims_master_index_id = $2`,
-        [id, doc.masterIndexId, doc.documentId, doc.revLabel]);
-    }
-    await folderFiles.copyIn(client, id, docs, empId);
+    await snapshot(client, id, empId, docs, missing);
     await client.query('COMMIT');
     return true;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// A folder frozen with only some P&IDs (before Freeze took all): add the
+// P&IDs it lacks, at their revision current NOW; the freeze time stays and
+// freeze_note says when / how it was completed. Returns { added, missing }.
+async function completeFrozen(id, empId) {
+  const folder = await getFolder(id);
+  const { docs, missing } = await folderFiles.gatherAll(folder.jobNo, folder.unitNo);
+  const { rows: have } = await query(`SELECT master_index_id AS mi FROM mto_folder_files WHERE folder_id = $1`, [id]);
+  const had = new Set(have.map((h) => h.mi));
+  const add = docs.filter((d) => !had.has(d.doc.masterIndexId));
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await snapshot(client, id, empId, add, missing);
+    const note = `Completed with all P&IDs of the index on ${new Date().toLocaleDateString('en-IN')}: ${add.length} added, ${missing.length} without PDF`;
+    await client.query(`UPDATE pid_folders SET freeze_note = $2 WHERE id = $1`, [id, note]);
+    await client.query('COMMIT');
+    return { added: add.map((d) => `${d.doc.pidName} Rev ${d.doc.revLabel || '-'}`), missing: missing.length, note };
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     throw err;
@@ -101,4 +136,4 @@ async function removeSelection(folderId, masterIndexId) {
   );
 }
 
-module.exports = { getAll, getFolder, create, freeze, newerRevision, getSelections, addSelection, removeSelection };
+module.exports = { getAll, getFolder, create, freeze, completeFrozen, newerRevision, getSelections, addSelection, removeSelection };

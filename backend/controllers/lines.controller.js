@@ -1,4 +1,5 @@
 const HttpError = require('../middlewares/HttpError');
+const { drawingStatus } = require('../services/drawingStatus');
 const lineData = require('../services/lineData.service');
 const lineZones = require('../services/lineZones.service');
 const { namesFor } = require('../services/auth.service');
@@ -32,7 +33,7 @@ async function data(req, res) {
   if (!service || !lsr) throw new HttpError(400, 'service and lsr are required');
   const line = await lineData.getLineData(req.user.jobNo, req.user.unitNo, req.folder.scope, service, lsr, subline);
   if (!line) throw new HttpError(404, 'This line is not in the line list or on the latest P&IDs');
-  res.json(line);
+  res.json({ ...line, drawing: drawingStatus(line, req.folder) });   // MTO allowed either way; flagged if no drawing
 }
 
 // Zones already saved for the line

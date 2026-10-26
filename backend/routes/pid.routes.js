@@ -8,23 +8,16 @@ const highlightsController = require('../controllers/pidHighlights.controller');
 
 const router = express.Router();
 
-// MTO folders: the ML picks P&IDs, then freezes the folder — that copies
-// each one's current revision PDF into IPMCS. MTO is taken only in frozen folders.
+// MTO folders: Freeze takes EVERY P&ID of the unit's index at its current
+// revision and copies the PDFs into IPMCS (no hand-picking). MTO is taken
+// only in frozen folders.
 router.get('/folders', asyncHandler(foldersController.list));
 router.post('/folders', requireRole('LEAD', 'ML'), asyncHandler(foldersController.create));
 router.post('/folders/:folderId/freeze', requireRole('LEAD', 'ML'), asyncHandler(foldersController.freeze));
 
 router.get('/folders/:folderId/documents', asyncHandler(foldersController.listDocuments));
-router.post('/folders/:folderId/selections', requireRole('LEAD', 'ML'), asyncHandler(foldersController.addSelection));
-router.delete(
-  '/folders/:folderId/selections/:masterIndexId',
-  requireRole('LEAD', 'ML'),
-  asyncHandler(foldersController.removeSelection)
-);
 
-// Live ePULSE lookups — the "tick which P&IDs to add" list (current
-// revisions) and the preview of an open folder's P&IDs.
-router.get('/pims/available', asyncHandler(pimsPidController.listAvailable));
+// Live ePULSE preview of an open folder's P&IDs (current revision).
 router.get('/revisions/:revId', asyncHandler(pimsPidController.getRevision));
 router.get('/revisions/:revId/file', asyncHandler(pimsPidController.streamRevision));
 
