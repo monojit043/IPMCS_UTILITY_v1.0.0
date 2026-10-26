@@ -66,31 +66,6 @@ async function freeze(id, empId, docs, missing) {
   }
 }
 
-// A folder frozen with only some P&IDs (before Freeze took all): add the
-// P&IDs it lacks, at their revision current NOW; the freeze time stays and
-// freeze_note says when / how it was completed. Returns { added, missing }.
-async function completeFrozen(id, empId) {
-  const folder = await getFolder(id);
-  const { docs, missing } = await folderFiles.gatherAll(folder.jobNo, folder.unitNo);
-  const { rows: have } = await query(`SELECT master_index_id AS mi FROM mto_folder_files WHERE folder_id = $1`, [id]);
-  const had = new Set(have.map((h) => h.mi));
-  const add = docs.filter((d) => !had.has(d.doc.masterIndexId));
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    await snapshot(client, id, empId, add, missing);
-    const note = `Completed with all P&IDs of the index on ${new Date().toLocaleDateString('en-IN')}: ${add.length} added, ${missing.length} without PDF`;
-    await client.query(`UPDATE pid_folders SET freeze_note = $2 WHERE id = $1`, [id, note]);
-    await client.query('COMMIT');
-    return { added: add.map((d) => `${d.doc.pidName} Rev ${d.doc.revLabel || '-'}`), missing: missing.length, note };
-  } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
-    throw err;
-  } finally {
-    client.release();
-  }
-}
-
 // Rev label of a newer ePULSE revision than documentId, if there is one
 async function newerRevision(masterIndexId, documentId) {
   const { rows } = await queryEpulse(
@@ -109,31 +84,4 @@ async function create(jobNo, unitNo, name, empId) {
   return (await withNames([await getFolder(rows[0].id)]))[0];
 }
 
-// The ePULSE P&ID sheets in a folder, each pinned at one revision
-// (documentId = ePULSE pid_documents.id) — the one current when it was added.
-async function getSelections(folderId) {
-  const { rows } = await query(
-    `SELECT pims_master_index_id AS "masterIndexId", document_id AS "documentId", rev_label AS "revLabel",
-            added_by AS "addedBy", added_at AS "addedAt"
-     FROM pid_folder_selections WHERE folder_id = $1 ORDER BY id`,
-    [folderId]
-  );
-  return rows;
-}
-
-async function addSelection(folderId, masterIndexId, documentId, revLabel, empId) {
-  await query(
-    `INSERT INTO pid_folder_selections (folder_id, pims_master_index_id, document_id, rev_label, added_by)
-     VALUES ($1,$2,$3,$4,$5) ON CONFLICT (folder_id, pims_master_index_id) DO NOTHING`,
-    [folderId, masterIndexId, documentId, revLabel, empId]
-  );
-}
-
-async function removeSelection(folderId, masterIndexId) {
-  await query(
-    `DELETE FROM pid_folder_selections WHERE folder_id = $1 AND pims_master_index_id = $2`,
-    [folderId, masterIndexId]
-  );
-}
-
-module.exports = { getAll, getFolder, create, freeze, completeFrozen, newerRevision, getSelections, addSelection, removeSelection };
+module.exports = { getAll, getFolder, create, freeze, newerRevision };

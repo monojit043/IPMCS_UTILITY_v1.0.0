@@ -16,7 +16,7 @@ const META = `
   (ff.highlighted_pdf IS NOT NULL) AS "hasHighlighted", ff.copied_by AS "copiedBy", ff.copied_at AS "copiedAt",
   f.name AS "folderName", f.job_no AS "jobNo", f.unit_no AS "unitNo"`;
 
-// Reads the PDF of one ePULSE revision (doc from pimsPid.getRevision / getCurrentDocument)
+// Reads the PDF of one ePULSE revision (doc from pimsPid.getRevision / listIndex)
 function readRevisionPdf(doc) {
   const full = pimsPid.uploadPath(doc.filePath);
   if (!full || !fs.existsSync(full)) return null;

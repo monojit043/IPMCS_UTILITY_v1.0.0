@@ -298,17 +298,6 @@ input.inline-input:focus { border-color: var(--color-accent); box-shadow: 0 0 0 
 .sum-item { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--text-secondary); }
 .sum-val { font-family: var(--font-mono); font-size: 11px; color: var(--text-primary); font-weight: 500; }
 
-/* ── Add item modal specifics ── */
-.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
-.form-row.triple { grid-template-columns: 1fr 1fr 1fr; }
-.cat-grid { display: flex; gap: 5px; flex-wrap: wrap; }
-.cat-btn {
-  padding: 4px 10px; border-radius: 5px; cursor: pointer;
-  font-family: var(--font-display); font-size: 10px; font-weight: 600; letter-spacing: .03em;
-  border: 1px solid var(--color-border); color: var(--text-muted); background: transparent; transition: all var(--dur-fast);
-}
-.cat-btn:hover { border-color: var(--color-border-strong); color: var(--text-secondary); }
-.cat-btn.active { background: var(--color-accent-soft); border-color: var(--color-border-accent); color: var(--color-accent-strong); }
 
 #dropZone {
   border: 2px dashed var(--color-border-strong); border-radius: var(--radius-lg);

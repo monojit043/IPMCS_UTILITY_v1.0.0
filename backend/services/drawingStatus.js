@@ -25,4 +25,4 @@ function drawingStatus(line, folder) {
   return names.length ? make('not_in_folder', names) : make('no_pid', []);
 }
 
-module.exports = { drawingStatus, DRAWING_LABEL: LABEL };
+module.exports = { drawingStatus };

@@ -7,8 +7,6 @@ const STATUS_BADGE = {
 let allLines = [];
 let activeSection = 'summary';
 let activeTab = 'input';
-let selectedCat = 'Pipe';
-let activeController = null; // which controller's "Add Item" modal is currently open
 let currentUser = null;
 
 let inputCtrl, dumpCtrl;
@@ -259,14 +257,6 @@ function bindGlobalEvents() {
 
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => switchTab(btn.dataset.tab));
-  });
-
-  document.getElementById('closeAddModal').addEventListener('click', closeAddModal);
-  document.getElementById('cancelAddModal').addEventListener('click', closeAddModal);
-  document.getElementById('saveItemBtn').addEventListener('click', saveItem);
-  document.getElementById('catGrid').addEventListener('click', (e) => {
-    const btn = e.target.closest('.cat-btn');
-    if (btn) selectCategory(btn);
   });
 
   document.getElementById('closeUploadModal').addEventListener('click', closeUploadModal);
@@ -1414,8 +1404,6 @@ function createMtoController(cfg) {
       resetFrom('subline');
       await populateServices();
     },
-    // Model Dump / other callers adding a row to the open zone
-    addNewItem: async (fields) => { insertRow(fields); return findRow(state.selectedId); },
   };
   return controller;
 }
@@ -1864,60 +1852,6 @@ async function freezePidFolder() {
   }
 }
 
-
-/* ══════════════ ADD ITEM MODAL (shared by both controllers) ══════════════ */
-function openAddModal(ctrl) {
-  if (!ctrl.activeLineId) { showToast('error', 'No line selected', 'Please select a line first'); return; }
-  activeController = ctrl;
-  document.getElementById('addModal').classList.add('open');
-  setTimeout(() => document.getElementById('mi_desc').focus(), 150);
-}
-function closeAddModal() { document.getElementById('addModal').classList.remove('open'); }
-
-function selectCategory(el) {
-  selectedCat = el.dataset.cat;
-  document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
-  el.classList.add('active');
-  const presets = {
-    Pipe: 'CS ERW Pipe SCH-40', Elbow: 'CS BW Elbow 90° LR', Tee: 'CS BW Tee Equal',
-    Reducer: 'CS BW Eccentric Reducer', Flange: 'CS WN Flange RF 300#',
-    Valve: 'CS Gate Valve FF', Gasket: 'Spiral Wound Gasket SS+Gr.',
-    'Stud Bolt': 'Stud Bolt A193 B7 w/ Nuts', Cap: 'CS BW Cap', Other: '',
-  };
-  document.getElementById('mi_desc').value = presets[selectedCat] || '';
-  document.getElementById('mi_unit').value = selectedCat === 'Pipe' ? 'm' : 'NOS';
-}
-
-async function saveItem() {
-  const desc = document.getElementById('mi_desc').value.trim();
-  if (!desc) { document.getElementById('mi_desc').classList.add('input-invalid'); return; }
-  document.getElementById('mi_desc').classList.remove('input-invalid');
-
-  const newItem = {
-    cat: selectedCat, desc,
-    size: document.getElementById('mi_size').value,
-    spec: document.getElementById('mi_spec').value,
-    sch: document.getElementById('mi_sch').value,
-    unit: document.getElementById('mi_unit').value,
-    qty: parseFloat(document.getElementById('mi_qty').value) || 1,
-    rem: document.getElementById('mi_rem').value.trim(),
-  };
-
-  let item;
-  try {
-    item = await activeController.addNewItem(newItem);
-  } catch (err) {
-    showToast('error', 'Could not add item', err.message);
-    return;
-  }
-
-  closeAddModal();
-  showToast('success', 'Item added', `${item.desc} · ${item.qty} ${item.unit}`);
-
-  document.getElementById('mi_desc').value = '';
-  document.getElementById('mi_qty').value = '';
-  document.getElementById('mi_rem').value = '';
-}
 
 /* ══════════════ UPLOAD MODAL (placeholder, shared) ══════════════ */
 function openUploadModal(ctrl) {
