@@ -62,6 +62,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   try {
     await populateUnits();
     await populateFolders();
+    loadItemList();
     allLines = await loadAllLines();
     await Promise.all([inputCtrl.populateServices(), dumpCtrl.populateServices()]);
   } catch (err) {
@@ -142,6 +143,21 @@ async function switchUnit(unitNo) {
   }
 }
 
+
+/* ══════════════ STANDARD ITEM LIST (Input Code dropdown) ══════════════ */
+// SYMBOL → Input Code; a <datalist> so the JE can type to filter or pick
+let itemSymbols = new Map();   // UPPER(symbol) → symbol as in the list
+async function loadItemList() {
+  try {
+    const { items } = await DataStore.getItemList();
+    itemSymbols = new Map(items.map(i => [i.symbol.toUpperCase(), i.symbol]));
+    let dl = document.getElementById('itemCodeList');
+    if (!dl) { dl = document.createElement('datalist'); dl.id = 'itemCodeList'; document.body.appendChild(dl); }
+    dl.innerHTML = items.map(i => `<option value="${escAttr(i.symbol)}">${escAttr(i.descr)}${i.elmtcd ? ' · ' + escAttr(i.elmtcd) : ''}</option>`).join('');
+  } catch (err) {
+    showToast('error', 'Could not load the item list', err.message);
+  }
+}
 
 /* ══════════════ MTO FOLDER (frozen set of P&ID revisions MTO is taken on) ══════════════ */
 let mtoFolders = [];   // frozen folders of the unit
@@ -987,6 +1003,7 @@ function createMtoController(cfg) {
     const errs = [];
     if (!r.pipingClass) errs.push('Piping Class missing');
     if (!r.inputCode && !r.itemCode) errs.push('Input Code or Item Code required');
+    if (r.inputCode && itemSymbols.size && !itemSymbols.has(String(r.inputCode).trim().toUpperCase())) errs.push('Input Code not in the standard item list');
     if (!r.dia1) errs.push('Dia1 missing');
     if (!(parseFloat(r.qty) > 0)) errs.push('Qty must be more than 0');
     return errs;
@@ -1036,7 +1053,7 @@ function createMtoController(cfg) {
     wrap.style.display = 'block'; empty.style.display = 'none'; summaryBar.style.display = 'flex';
 
     const rowClass = { mismatch: 'row-mismatch', only: 'row-manual-only' };
-    const cell = (r, f, cls = '') => `<input class="inline-input ${cls}" data-row="${r.id}" data-field="${f}" value="${escAttr(r[f])}"/>`;
+    const cell = (r, f, cls = '') => `<input class="inline-input ${cls}" data-row="${r.id}" data-field="${f}" value="${escAttr(r[f])}"${f === 'inputCode' ? ' list="itemCodeList" autocomplete="off"' : ''}/>`;
     let errorCount = 0;
     byId('mtoTbody').innerHTML = state.rows.map(r => {
       const errs = rowErrors(r);
@@ -1320,7 +1337,11 @@ function createMtoController(cfg) {
   const tbody = byId('mtoTbody');
   tbody.addEventListener('change', (e) => {
     const inp = e.target.closest('input[data-row]');
-    if (inp) editCell(Number(inp.dataset.row), inp.dataset.field, inp.value.trim());
+    if (!inp) return;
+    let value = inp.value.trim();
+    // Input Code: take the list's own spelling (pip → PIP)
+    if (inp.dataset.field === 'inputCode' && itemSymbols.has(value.toUpperCase())) inp.value = value = itemSymbols.get(value.toUpperCase());
+    editCell(Number(inp.dataset.row), inp.dataset.field, value);
   });
   tbody.addEventListener('click', (e) => {
     const del = e.target.closest('[data-delete-id]');
