@@ -1,5 +1,6 @@
 const HttpError = require('../middlewares/HttpError');
 const { drawingStatus } = require('../services/drawingStatus');
+const { highlightedKeys, isHighlighted } = require('../services/highlightCheck');
 const lineData = require('../services/lineData.service');
 const lineZones = require('../services/lineZones.service');
 const { namesFor } = require('../services/auth.service');
@@ -34,6 +35,16 @@ async function data(req, res) {
   const line = await lineData.getLineData(req.user.jobNo, req.user.unitNo, req.folder.scope, service, lsr, subline);
   if (!line) throw new HttpError(404, 'This line is not in the line list or on the latest P&IDs');
   res.json({ ...line, drawing: drawingStatus(line, req.folder) });   // MTO allowed either way; flagged if no drawing
+}
+
+// Before saving MTO: is the line + zone highlighted on the folder's drawing?
+// ?service=&lsr=&subline=&zone= → { drawing, highlighted (true / false / null = no drawing) }
+async function highlightCheck(req, res) {
+  const { service, lsr, subline = '', zone } = req.query;
+  if (!service || !lsr || !zone) throw new HttpError(400, 'service, lsr and zone are required');
+  const line = await lineData.getLineData(req.user.jobNo, req.user.unitNo, req.folder.scope, service, lsr, subline);
+  const drawing = drawingStatus(line, req.folder);
+  res.json({ drawing, highlighted: isHighlighted(await highlightedKeys(req.folder.id), drawing, service, lsr, subline, zone) });
 }
 
 // Zones already saved for the line
@@ -115,4 +126,5 @@ async function getSummary(req, res) {
   res.json(await summary.getSummary(req.user.jobNo, req.user.unitNo, req.folder));
 }
 
-module.exports = { searchZones, deleteZone, getSummary, services, lsrNos, sublines, data, zones, listZones, getZone, saveZone, listRevisions, getRevision };
+module.exports = {
+  highlightCheck, searchZones, deleteZone, getSummary, services, lsrNos, sublines, data, zones, listZones, getZone, saveZone, listRevisions, getRevision };

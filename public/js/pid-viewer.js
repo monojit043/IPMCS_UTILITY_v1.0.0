@@ -22,7 +22,13 @@ window.addEventListener('DOMContentLoaded', async () => {
   docId = params.get('doc');
   // Opened from a line's "Open & Highlight P&ID": its zone colours the strokes
   const lineZone = params.get('zone');
-  if (lineZone) line = { zone: lineZone, lineNo: params.get('lineNo') || '' };
+  // …and every stroke records that line, so MTO saves can check it was highlighted
+  if (lineZone) {
+    line = {
+      zone: lineZone, lineNo: params.get('lineNo') || '',
+      key: params.get('service') ? { service: params.get('service'), lsrNo: params.get('lsr') || '', sublineNo: params.get('sub') || '' } : null,
+    };
+  }
 
   const session = DataStore.getSession();
   myUserId = session ? session.empId : null;   // highlights are stored per employee ID
@@ -54,7 +60,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   window.addEventListener('mouseup', async () => {
     if (!highlightMode || !drawingStroke) return;
     if (drawingStroke.length > 1) {
-      strokes.push({ zone: line ? line.zone : null, points: drawingStroke });
+      strokes.push({ zone: line ? line.zone : null, line: line ? line.key : null, points: drawingStroke });
       drawingStroke = null;
       drawAnnotations();
       try {
@@ -163,7 +169,7 @@ function drawAnnotations() {
     .forEach(u => strokeStyleFor(u.strokes || [], u.userId));
 
   // My own highlights (including the in-progress stroke).
-  const mine = drawingStroke ? strokes.concat([{ zone: line ? line.zone : null, points: drawingStroke }]) : strokes;
+  const mine = drawingStroke ? strokes.concat([{ zone: line ? line.zone : null, line: line ? line.key : null, points: drawingStroke }]) : strokes;
   strokeStyleFor(mine, myUserId);
 
   annoCtx.restore();

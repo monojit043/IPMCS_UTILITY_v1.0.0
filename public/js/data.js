@@ -255,6 +255,10 @@ const DataStore = (() => {
   function deleteLineZone(id, reason) {
     return apiFetch(`/line-zones/${id}`, { method: 'DELETE', body: JSON.stringify({ reason: reason || null }) });
   }
+  // Is the line + zone highlighted on the MTO folder's drawing? (checked before saving)
+  function getHighlightCheck(service, lsr, subline, zone) {
+    return apiFetch('/lines/highlight-check' + qs({ service, lsr, subline: subline || '', zone }));
+  }
   // MTO Summary: ePULSE zone plan vs IPMCS MTO taken, for the current unit
   function getMtoSummary() {
     return apiFetch('/line-zones/summary');
@@ -337,7 +341,7 @@ const DataStore = (() => {
   return {
     login, ssoLogin, logout, selectAssignment, getSession, clearSession, getUnits, getUnit, setUnit, getFolder, setFolder, getPendingAssignment, clearPendingAssignment,
     getServices, getLsrNos, getSublines, getLineData, getZones,
-    getLineZones, getLineZone, saveLineZone, getMtoSummary, searchLineZones, deleteLineZone, getTeam, searchEmployees, assignTeamMember, removeTeamMember, getZoneRevisions, getZoneRevision,
+    getLineZones, getLineZone, saveLineZone, getMtoSummary, getHighlightCheck, searchLineZones, deleteLineZone, getTeam, searchEmployees, assignTeamMember, removeTeamMember, getZoneRevisions, getZoneRevision,
     getPidFolders, createPidFolder, getPidDocuments,
     freezePidFolder,
     getPidDocument, getPidDocumentForLine, pidFileUrl, pidRevisionFileUrl, downloadPidCopy, authHeaders,

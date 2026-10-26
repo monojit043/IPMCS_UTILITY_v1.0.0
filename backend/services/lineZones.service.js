@@ -1,6 +1,7 @@
 const { pool, query, queryEpulse } = require('../config/db');
 const lineData = require('./lineData.service');
 const { drawingStatus } = require('./drawingStatus');
+const { highlightedKeys, isHighlighted } = require('./highlightCheck');
 
 // mto_line_zones: what an engineer saves for one line + zone — the COSMAS
 // header and the BoM rows (manual MTO / model dump), never the line data.
@@ -139,7 +140,9 @@ async function getZoneFull(id, folder) {
       : [{ field: 'line', label: 'Line', was: last.basis.lineNo, now: 'no longer in the line list / latest P&IDs' }];
   }
   const lastRev = last ? (({ basis, ...rest }) => rest)(last) : null;
-  return { zone, line, drawing: drawingStatus(line, folder), mto, dump, extracted, lastRevision: lastRev, basisChanges };
+  const drawing = drawingStatus(line, folder);
+  const highlighted = isHighlighted(await highlightedKeys(folder.id), drawing, zone.service, zone.lsrNo, zone.sublineNo, zone.zone);
+  return { zone, line, drawing, highlighted, mto, dump, extracted, lastRevision: lastRev, basisChanges };
 }
 
 // Revision history of a zone (newest first) and one revision in full
@@ -175,6 +178,7 @@ async function saveZone({ jobNo, unitNo, empId, folder, service, lsrNo, sublineN
   const basis = await lineData.getBasis(jobNo, line, folder.scope);   // what this save is based on
   basis.folder = { id: folder.id, name: folder.name };
   basis.drawing = drawingStatus(line, folder);   // was the drawing in the folder when this was saved
+  const hlKeys = await highlightedKeys(folder.id);   // …and the line + zone highlighted on it (per zone below)
 
   const cols = Object.keys(h);
   const client = await pool.connect();
@@ -208,7 +212,7 @@ async function saveZone({ jobNo, unitNo, empId, folder, service, lsrNo, sublineN
     await client.query(
       `INSERT INTO mto_line_zone_revisions (line_zone_id, rev_no, kind, saved_by, basis, header, rows, row_count)
        VALUES ($1, (SELECT coalesce(max(rev_no), 0) + 1 FROM mto_line_zone_revisions WHERE line_zone_id = $1), $2, $3, $4, $5, $6, $7)`,
-      [saved.id, kind, empId, JSON.stringify(basis), JSON.stringify(headerSaved), JSON.stringify(rowsSaved), rowsSaved.length]
+      [saved.id, kind, empId, JSON.stringify({ ...basis, highlighted: isHighlighted(hlKeys, basis.drawing, service, lsrNo, sublineNo, z) }), JSON.stringify(headerSaved), JSON.stringify(rowsSaved), rowsSaved.length]
     );
     await client.query('COMMIT');
     return getZoneFull(saved.id, folder);

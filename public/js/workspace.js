@@ -371,6 +371,7 @@ function renderMtoProgress(s) {
         ${s.zones.length ? `<tfoot><tr><td>Total</td><td class="td-num">${Z.planned}</td><td class="td-num">${Z.taken}</td><td class="td-num">${Z.left}</td><td class="td-num">${Z.notInPlan}</td></tr></tfoot>` : ''}
       </table>
       ${Z.savedWithoutRows ? `<div class="mp-note">${Z.savedWithoutRows} zone(s) saved with no MTO rows are not counted as taken.</div>` : ''}
+      ${Z.takenNotHighlighted ? `<div class="mp-note drw-flag">⚠ ${Z.takenNotHighlighted} line + zone(s) have MTO taken but are not highlighted on their drawing — see Lines window (Highlighted column).</div>` : ''}
       ${Z.takenWithoutDrawing ? `<div class="mp-note drw-flag">⚠ ${Z.takenWithoutDrawing} line + zone(s) have MTO taken but their drawing is not in this folder — see Lines window / Zone status report.</div>` : ''}
       ${s.folder.missingPids ? `<div class="mp-note">${s.folder.missingPids} P&amp;ID(s) of the index had no PDF when this folder was frozen.</div>` : ''}
     </div>`;
@@ -526,12 +527,12 @@ let linesAll = [], linesCtrl = null;
 async function openLinesModal(ctrl) {
   linesCtrl = ctrl;
   document.getElementById('linesTitle').textContent = `Lines — MTO taken · ${currentUser.jobNo || ''} · Unit ${DataStore.getUnit() || '—'} · ${folderLabel()}`;
-  document.getElementById('linesTbody').innerHTML = '<tr><td colspan="16" style="padding:14px;color:var(--text-faint)">Loading…</td></tr>';
+  document.getElementById('linesTbody').innerHTML = '<tr><td colspan="17" style="padding:14px;color:var(--text-faint)">Loading…</td></tr>';
   document.getElementById('linesModal').classList.add('open');
   try {
     linesAll = await DataStore.searchLineZones();
   } catch (err) {
-    document.getElementById('linesTbody').innerHTML = `<tr><td colspan="16" style="padding:14px;color:var(--color-danger)">${escAttr(err.message)}</td></tr>`;
+    document.getElementById('linesTbody').innerHTML = `<tr><td colspan="17" style="padding:14px;color:var(--color-danger)">${escAttr(err.message)}</td></tr>`;
     return;
   }
   const fill = (id, values, first) => {
@@ -571,6 +572,7 @@ function renderLines() {
       <td class="td-num">${l.items}</td><td class="td-num">${l.dumpRows}</td><td>${STATUS_BADGE[l.status] || escAttr(l.status)}</td>
       <td>${l.revNo ? 'Rev ' + l.revNo : '—'}</td><td title="${escAttr(l.savedBy)}">${escAttr(l.savedByName || '—')}</td>
       <td>${l.savedAt ? new Date(l.savedAt).toLocaleString() : '—'}</td>
+      <td>${l.highlighted === true ? 'Yes' : l.highlighted === false ? '<span class="drw-flag" title="MTO saved but the line + zone is not highlighted on the folder\'s drawing">⚠ No</span>' : '—'}</td>
       <td>${!l.drawing ? '—' : l.drawing.ok ? 'Yes' : `<span class="drw-flag" title="${escAttr(l.drawing.label + (l.drawing.pids.length ? ': ' + l.drawing.pids.join(', ') : ''))}">⚠ ${escAttr(l.drawing.label)}</span>`}</td>
       <td>${l.inPlan === null ? '—' : l.inPlan ? 'Yes' : 'No'}</td>
       <td>${l.changes.length ? `<span class="chg" title="${escAttr(changesText(l))}">⚠ ${l.changes.length}</span>` : '—'}</td>
@@ -578,7 +580,7 @@ function renderLines() {
         <div class="tool-btn" data-open-id="${l.id}" title="Open in the MTO tab"><i class="ti ti-arrow-right"></i></div>
         ${canDelete ? `<div class="tool-btn" data-del-id="${l.id}" title="Delete this line + zone (archived)" style="color:var(--color-danger)"><i class="ti ti-trash"></i></div>` : ''}
       </td></tr>`;
-  }).join('') || '<tr><td colspan="16" style="padding:14px;color:var(--text-faint)">No line + zones match</td></tr>';
+  }).join('') || '<tr><td colspan="17" style="padding:14px;color:var(--text-faint)">No line + zones match</td></tr>';
 }
 
 async function deleteLineZone(id) {
@@ -930,6 +932,7 @@ function createMtoController(cfg) {
     const note = byId('ld_line');
     const msgs = [
       d && d.drawing && !d.drawing.ok && `⚠ Drawing not in MTO folder ${folderLabel()} (${d.drawing.label}${d.drawing.pids.length ? ': ' + d.drawing.pids.join(', ') : ''}) — MTO can be saved but is flagged; no frozen copy to highlight on`,
+      d && d.drawing && d.drawing.ok && state.zoneRec && state.highlighted === false && `⚠ Zone ${state.zone} not highlighted on ${d.drawing.pids.join(', ')} — saved MTO is flagged until it is`,
       d && d.dataMismatch && `⚠ Line list and P&ID differ — line list used: ${d.dataMismatch}`,
     ].filter(Boolean);
     note.textContent = msgs.join('  ·  ');
@@ -1180,6 +1183,12 @@ function createMtoController(cfg) {
   /* ── Save: line + zone, COSMAS header and this tab's rows → mto_line_zones ── */
   async function save() {
     if (!requireZone()) return;
+    const d0 = state.lineData;
+    // Not highlighted on the folder's drawing yet: warn — the JE may still save (flagged)
+    try {
+      const chk = await DataStore.getHighlightCheck(d0.service, d0.lsrNo, d0.sublineNo, state.zone);
+      if (chk.highlighted === false && !confirm(`Line ${d0.lineNo}, zone ${state.zone} is NOT highlighted on its P&ID (${chk.drawing.pids.join(', ')}) in MTO folder ${folderLabel()}.\n\nOpen & Highlight P&ID first (Cancel), or save anyway (OK) — it will be flagged "Not highlighted" until it is.`)) return;
+    } catch (err) { /* the check is advisory — never blocks saving */ }
     const btn = byId('saveBtn'); btn.disabled = true;
     try {
       const d = state.lineData;
@@ -1188,7 +1197,8 @@ function createMtoController(cfg) {
         header: readHeader(), kind: cfg.kind, rows: state.rows.map(snapshot),
       });
       state.zoneRec = full.zone;
-      state.lineData = full.line || d;
+      state.lineData = full.line ? { ...full.line, drawing: full.drawing } : d;
+      state.highlighted = full.highlighted;
       state.rows = (full[cfg.kind] || []).map(r => ({ ...r }));
       state.extracted = full.extracted || [];
       state.lastRevision = full.lastRevision || null;
@@ -1276,7 +1286,8 @@ function createMtoController(cfg) {
     const d = state.lineData;
     try {
       const doc = await DataStore.getPidDocumentForLine(d.service, d.lsrNo, d.sublineNo);
-      const qs = new URLSearchParams({ doc: doc.fileId, lineNo: d.lineNo });   // the MTO folder's copy
+      // the MTO folder's copy; service/lsr/sub let each stroke record the line it highlights
+      const qs = new URLSearchParams({ doc: doc.fileId, lineNo: d.lineNo, service: d.service, lsr: d.lsrNo, sub: d.sublineNo || '' });
       if (state.zone) qs.set('zone', state.zone);
       window.open(`pid-viewer.html?${qs}`, 'ipmcs_pid_viewer_' + cfg.key, 'width=1100,height=800');
     } catch (err) {

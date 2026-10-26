@@ -10,5 +10,6 @@ router.get('/meta/lsr', asyncHandler(c.lsrNos));
 router.get('/meta/sublines', asyncHandler(c.sublines));
 router.get('/meta/zones', asyncHandler(c.zones));
 router.get('/data', asyncHandler(c.data));
+router.get('/highlight-check', asyncHandler(c.highlightCheck));
 
 module.exports = router;

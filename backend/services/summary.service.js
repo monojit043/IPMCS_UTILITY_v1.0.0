@@ -1,6 +1,7 @@
 const { query, queryEpulse } = require('../config/db');
 const lineData = require('./lineData.service');
 const { drawingStatus } = require('./drawingStatus');
+const { highlightedKeys, isHighlighted } = require('./highlightCheck');
 
 // MTO progress of one MTO folder: ePULSE's zone PLAN (piping_line_list, made
 // in ePULSE → Create Piping Line List → zone allocation) for the unit's lines
@@ -45,7 +46,13 @@ async function getSummary(jobNo, unitNo, folder) {
   const takenZones = done.filter((z) => z.items_count > 0);
   const data = await lineData.getLineDataBulk(jobNo, unitNo, folder.scope,
     takenZones.map((z) => ({ service: z.service, lsrNo: z.lsr_no, sublineNo: z.subline_no })));
-  const noDrawing = takenZones.filter((z) => !drawingStatus(data.get(`${z.service}|${z.lsr_no}|${z.subline_no || ''}`), folder).ok).length;
+  const hl = await highlightedKeys(folder.id);
+  let noDrawing = 0, notHighlighted = 0;
+  takenZones.forEach((z) => {
+    const drawing = drawingStatus(data.get(`${z.service}|${z.lsr_no}|${z.subline_no || ''}`), folder);
+    if (!drawing.ok) noDrawing++;
+    else if (!isHighlighted(hl, drawing, z.service, z.lsr_no, z.subline_no, z.zone)) notHighlighted++;
+  });
 
   let started = 0, complete = 0;
   for (const [k, zones] of planned) {
@@ -95,6 +102,7 @@ async function getSummary(jobNo, unitNo, folder) {
       notInPlan: notInPlanZones,
       savedWithoutRows: done.filter((z) => !z.items_count).length,
       takenWithoutDrawing: noDrawing,   // line + zones with MTO whose drawing isn't in the folder
+      takenNotHighlighted: notHighlighted,   // drawing in the folder but the line + zone not highlighted on it
     },
     zones: [...zones.values()].sort((a, b) => a.zone.localeCompare(b.zone)),
   };
