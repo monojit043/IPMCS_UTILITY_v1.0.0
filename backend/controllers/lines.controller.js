@@ -6,7 +6,8 @@ const summary = require('../services/summary.service');
 const reports = require('../services/reports.service');
 
 // Everything here works inside one frozen MTO folder (req.folder, see
-// middlewares/folder.js): lines on its pinned P&ID revisions, MTO of that folder.
+// middlewares/folder.js): every line-list line + every line on the latest
+// P&IDs is open; the MTO saved belongs to that folder.
 
 // ── Line selection: Service → LSR NO → Subline No. (live from ePULSE) ──
 async function services(req, res) {
@@ -30,7 +31,7 @@ async function data(req, res) {
   const { service, lsr, subline = '' } = req.query;
   if (!service || !lsr) throw new HttpError(400, 'service and lsr are required');
   const line = await lineData.getLineData(req.user.jobNo, req.user.unitNo, req.folder.scope, service, lsr, subline);
-  if (!line) throw new HttpError(404, `This line is not on the P&IDs of MTO folder "${req.folder.name}"`);
+  if (!line) throw new HttpError(404, 'This line is not in the line list or on the latest P&IDs');
   res.json(line);
 }
 

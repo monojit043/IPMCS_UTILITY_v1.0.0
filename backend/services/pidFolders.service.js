@@ -1,4 +1,5 @@
-const { query } = require('../config/db');
+const { pool, query, queryEpulse } = require('../config/db');
+const folderFiles = require('./folderFiles.service');
 const { namesFor } = require('./auth.service');
 
 // Folders belong to one job + unit and record who made them by employee ID;
@@ -28,14 +29,38 @@ async function getFolder(id) {
   return rows[0] || null;
 }
 
-// Freezing fixes the folder: its P&ID list and their pinned revisions no
-// longer change. Newer revisions go into the next MTO folder.
-async function freeze(id, empId) {
-  const { rowCount } = await query(
-    `UPDATE pid_folders SET status = 'frozen', frozen_by = $2, frozen_at = now() WHERE id = $1 AND status = 'open'`,
-    [id, empId]
-  );
-  return rowCount > 0;
+// Freezing fixes the folder: each P&ID is pinned at the revision current
+// NOW and its PDF copied into IPMCS (docs = [{ doc, pdf }]); after that the
+// folder's P&IDs don't change. Newer revisions go into the next MTO folder.
+async function freeze(id, empId, docs) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rowCount } = await client.query(
+      `UPDATE pid_folders SET status = 'frozen', frozen_by = $2, frozen_at = now() WHERE id = $1 AND status = 'open'`,
+      [id, empId]);
+    if (!rowCount) { await client.query('ROLLBACK'); return false; }
+    for (const { doc } of docs) {
+      await client.query(
+        `UPDATE pid_folder_selections SET document_id = $3, rev_label = $4 WHERE folder_id = $1 AND pims_master_index_id = $2`,
+        [id, doc.masterIndexId, doc.documentId, doc.revLabel]);
+    }
+    await folderFiles.copyIn(client, id, docs, empId);
+    await client.query('COMMIT');
+    return true;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// Rev label of a newer ePULSE revision than documentId, if there is one
+async function newerRevision(masterIndexId, documentId) {
+  const { rows } = await queryEpulse(
+    `SELECT id, rev_label FROM pid_documents WHERE master_index_id = $1 AND status = 'current'`, [masterIndexId]);
+  return rows[0] && rows[0].id !== documentId ? rows[0].rev_label : null;
 }
 
 // null when the job + unit already has a folder of that name
@@ -76,4 +101,4 @@ async function removeSelection(folderId, masterIndexId) {
   );
 }
 
-module.exports = { getAll, getFolder, create, freeze, getSelections, addSelection, removeSelection };
+module.exports = { getAll, getFolder, create, freeze, newerRevision, getSelections, addSelection, removeSelection };

@@ -1,35 +1,38 @@
 const HttpError = require('../middlewares/HttpError');
 const highlightsService = require('../services/pidHighlights.service');
-const pimsPid = require('../services/pimsPid.service');
+const folderFiles = require('../services/folderFiles.service');
 
 function pageOf(req) {
   return Number(req.query.page) || 1;
 }
 
-// The drawing revision (ePULSE pid_documents.id) — only one of the user's job + unit
-async function revOf(req) {
-  const doc = await pimsPid.getRevision(req.params.revId);
-  if (!doc || doc.jobNo !== req.user.jobNo || doc.unitNo !== req.user.unitNo) throw new HttpError(404, 'P&ID revision not found in this job / unit');
-  return { revDocId: doc.documentId, masterIndexId: doc.masterIndexId };
+// :fileId = an MTO folder's copy of a drawing (mto_folder_files.id) — only of the user's job + unit
+async function fileOf(req) {
+  const f = await folderFiles.getFile(req.params.fileId);
+  if (!f || f.jobNo !== req.user.jobNo || f.unitNo !== req.user.unitNo) throw new HttpError(404, 'P&ID copy not found in this job / unit');
+  return { fileId: f.fileId, revDocId: f.documentId, masterIndexId: f.masterIndexId };
 }
 
 async function getAll(req, res) {
-  res.json(await highlightsService.getAllForDocument(await revOf(req), pageOf(req)));
+  res.json(await highlightsService.getAllForDocument(await fileOf(req), pageOf(req)));
 }
 
 async function getMine(req, res) {
-  res.json({ strokes: await highlightsService.getMine(await revOf(req), pageOf(req), req.user.empId) });
+  res.json({ strokes: await highlightsService.getMine(await fileOf(req), pageOf(req), req.user.empId) });
 }
 
+// Saving also rewrites the folder's highlighted PDF copy
 async function putMine(req, res) {
   const { strokes } = req.body;
   if (!Array.isArray(strokes)) throw new HttpError(400, 'strokes must be an array');
-  const result = await highlightsService.upsertMine(await revOf(req), pageOf(req), req.user.empId, strokes);
+  const file = await fileOf(req);
+  const result = await highlightsService.upsertMine(file, pageOf(req), req.user.empId, strokes);
+  await folderFiles.refreshHighlighted(file.fileId);
   res.json({ strokes: result });
 }
 
 async function getZoneBreaks(req, res) {
-  res.json(await highlightsService.getZoneBreaks(await revOf(req), pageOf(req)));
+  res.json(await highlightsService.getZoneBreaks(await fileOf(req), pageOf(req)));
 }
 
 module.exports = { getAll, getMine, putMine, getZoneBreaks };

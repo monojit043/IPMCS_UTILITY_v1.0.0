@@ -81,7 +81,7 @@ async function zoneStatus(jobNo, unitNo, folder) {
   const planned = new Set(plan.map((p) => `${p.service}|${p.seq_no}|${p.zone}`));
   const names = await namesFor(zones.map((z) => z.updatedBy));
   const header = ['Line No', 'Service', 'LSR NO', 'Subline No', 'Zone', 'In zone plan', 'Status', 'MTO rows', 'Model dump rows',
-    'Line Key (COSMAS)', 'Size', 'Piping Class', 'INS Type', 'Des Press', 'Des Temp', 'P&ID (folder rev)', 'Picked from',
+    'Line Key (COSMAS)', 'Size', 'Piping Class', 'INS Type', 'Des Press', 'Des Temp', 'P&ID (latest rev)', 'Picked from',
     'Last rev', 'Last saved by', 'Last saved at', 'Line data changed since last save'];
   const rows = zones.map((z) => {
     const seq = z.sublineNo ? `${z.lsrNo}-${z.sublineNo}` : z.lsrNo;
@@ -107,7 +107,7 @@ async function overview(jobNo, unitNo, folder) {
   return zones.map((z) => {
     const seq = z.sublineNo ? `${z.lsrNo}-${z.sublineNo}` : z.lsrNo;
     const changes = !z.basis ? []
-      : !z.line ? [{ label: 'Line', was: z.basis.lineNo, now: "no longer on this folder's P&IDs" }]
+      : !z.line ? [{ label: 'Line', was: z.basis.lineNo, now: 'no longer in the line list / latest P&IDs' }]
       : lineData.compareBasis(z.basis, z.liveBasis);
     return {
       id: z.id, lineNo: z.line ? z.line.lineNo : null, service: z.service, lsrNo: z.lsrNo, sublineNo: z.sublineNo, zone: z.zone,
@@ -126,7 +126,7 @@ async function progress(jobNo, unitNo, folder) {
   const rows = s.zones.map((z) => [z.zone, z.planned, z.taken, z.left, z.notInPlan]);
   rows.push(['Total', s.lineZones.planned, s.lineZones.taken, s.lineZones.left, s.lineZones.notInPlan]);
   rows.push([]);
-  rows.push(['Lines', 'In zone plan', 'MTO taken', 'All zones done', 'Left', "Lines on the folder's P&IDs"]);
+  rows.push(['Lines', 'In zone plan', 'MTO taken', 'All zones done', 'Left', 'Lines in line list + latest P&IDs']);
   rows.push(['', s.lines.planned, s.lines.started, s.lines.complete, s.lines.left, s.lines.inSources]);
   if (!s.hasPlan) rows.push(['No zone plan for this unit in ePULSE yet (Create Piping Line List → zone allocation)']);
   return { header, rows };

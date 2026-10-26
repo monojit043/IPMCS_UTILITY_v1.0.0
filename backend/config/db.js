@@ -12,7 +12,8 @@ const baseConfig = {
 const pool = new Pool({ ...baseConfig, database: process.env.DB_NAME });
 
 // ePULSE, READ-ONLY. Everything IPMCS doesn't own is read live from here —
-// nothing is copied:
+// nothing is copied (except the P&ID PDFs a frozen MTO folder keeps, see
+// services/folderFiles.service.js):
 //   - login, jobs/units  → pc2_emp.users, user_role_assignments, projects
 //                          (ePULSE links these live to PC-2)
 //   - line list          → line_list

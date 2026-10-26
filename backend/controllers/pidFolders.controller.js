@@ -1,6 +1,7 @@
 const HttpError = require('../middlewares/HttpError');
 const foldersService = require('../services/pidFolders.service');
 const pimsPid = require('../services/pimsPid.service');
+const folderFiles = require('../services/folderFiles.service');
 
 // Folders belong to one job + unit — the one being worked in (req.user.jobNo
 // / unitNo, checked against the unit's team by middlewares/unit.js).
@@ -28,7 +29,17 @@ async function freeze(req, res) {
   const folder = await ownFolder(req);
   assertOpen(folder);
   if (!folder.documentCount) throw new HttpError(400, 'Add at least one P&ID before freezing the folder');
-  await foldersService.freeze(folder.id, req.user.empId);
+  // each P&ID at its revision current NOW, with its PDF read from ePULSE
+  const sel = await foldersService.getSelections(folder.id);
+  const docs = await Promise.all(sel.map(async (s) => {
+    const doc = await pimsPid.getCurrentDocument(s.masterIndexId);
+    return { s, doc, pdf: doc ? folderFiles.readRevisionPdf(doc) : null };
+  }));
+  const bad = docs.filter((d) => !d.doc || !d.pdf);
+  if (bad.length) {
+    throw new HttpError(409, `Can't freeze — no current PDF in ePULSE for: ${bad.map((d) => (d.doc ? d.doc.pidName : `P&ID #${d.s.masterIndexId}`)).join(', ')}`);
+  }
+  if (!(await foldersService.freeze(folder.id, req.user.empId, docs))) throw new HttpError(409, 'This folder was frozen meanwhile');
   const [out] = await foldersService.getAll(req.user.jobNo, req.user.unitNo).then((all) => all.filter((f) => f.id === folder.id));
   res.json(out);
 }
@@ -42,16 +53,21 @@ async function create(req, res) {
   res.status(201).json(folder);
 }
 
-// Each P&ID of the folder at its PINNED revision; newerRev is set when
-// ePULSE has a newer revision since (it belongs in the next MTO folder).
+// Open folder: each selected P&ID at its CURRENT ePULSE revision (what Freeze
+// will copy). Frozen folder: its own copies kept in IPMCS (fileId), with
+// newerRev set when ePULSE has a newer revision since (for the next folder).
 async function listDocuments(req, res) {
   const folder = await ownFolder(req);
+  if (folder.status === 'frozen') {
+    const files = await folderFiles.listFiles(folder.id);
+    const out = await Promise.all(files.map(async (f) => {
+      const d = await pimsPid.getRevision(f.documentId);
+      return { ...f, uploadedBy: d && d.uploadedBy, uploadedAt: d && d.uploadedAt, newerRev: await foldersService.newerRevision(f.masterIndexId, f.documentId) };
+    }));
+    return res.json(out);
+  }
   const sel = await foldersService.getSelections(folder.id);
-  const docs = await Promise.all(sel.map(async (s) => {
-    const d = s.documentId ? await pimsPid.getRevision(s.documentId) : null;
-    if (!d) return null;
-    return { ...d, addedAt: s.addedAt, newerRev: d.isCurrent ? null : d.currentRevLabel };
-  }));
+  const docs = await Promise.all(sel.map((s) => pimsPid.getCurrentDocument(s.masterIndexId)));
   res.json(docs.filter(Boolean));
 }
 

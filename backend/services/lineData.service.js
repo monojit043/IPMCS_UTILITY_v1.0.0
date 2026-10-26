@@ -1,27 +1,41 @@
 const { queryEpulse } = require('../config/db');
 
-// LINE DATA — read live from ePULSE every time, never stored in IPMCS, and
-// always for ONE MTO FOLDER (its "scope"): the folder pins P&ID revisions, so
-//   1. pid_extracted_lines — lines read off exactly those pinned revisions
-//      (ePULSE keeps the lines of every revision): size, spec, insulation,
-//      sub-lines (05341-01);
-//   2. line_list — the line-list lines whose P&ID no. names one of the
-//      folder's P&IDs: size, class, insulation, design / operating P&T. Its
+// LINE DATA — read live from ePULSE every time, never stored in IPMCS.
+// The lines open for MTO are ALWAYS (fixed rule) every line of the unit in
+//   1. line_list — size, class, insulation, design / operating P&T. Its
 //      unit_no reads "101 (PDH Unit)", so match on parent_unit or the leading
-//      unit number.
-// scope = { docIds: [pinned pid_documents ids], pidNames: [...], pinned: Map pidName → { rev, documentId } }
+//      unit number;
+//   2. pid_extracted_lines of the LATEST revision of every active P&ID of the
+//      job — size, spec, insulation, sub-lines (05341-01).
+// whatever MTO folder is open (the folder only decides which frozen P&ID
+// copies are highlighted on and which MTO record a save goes into).
+// scope = latestScope(job) = { docIds: [current pid_documents ids], pidNames, pinned: Map pidName → { rev, documentId } }
 // A line is identified the COSMAS way: Service / Unit / LSR NO / Subline No.
 // Letters are part of the LSR NO (05341A); a sub-line exists only on P&IDs.
 
-// $1 job, $2 unit, $3 pinned doc ids, $4 folder P&ID names
+// $1 job, $2 unit, $3 latest doc ids, $4 P&ID names (every query binds all four, so each must be typed)
 const LL_SCOPE = `project_id = $1 AND (parent_unit = $2 OR split_part(unit_no, ' ', 1) = $2)
-  AND EXISTS (SELECT 1 FROM unnest($4::text[]) n WHERE line_list.pid_no ILIKE '%' || n || '%')
-  AND $3::int[] IS NOT NULL`;   // every query binds all four, so each must be typed
+  AND $3::int[] IS NOT NULL AND $4::text[] IS NOT NULL`;
 const PID_LINES = `
   FROM pid_extracted_lines e
   JOIN pid_master_index m ON m.id = e.master_index_id
   WHERE e.document_id = ANY($3::int[]) AND e.unit_no = $2 AND $1::text IS NOT NULL AND $4::text[] IS NOT NULL`;
 const base = (jobNo, unitNo, scope) => [jobNo, unitNo, scope.docIds, scope.pidNames];
+
+// The latest (current) revision of every active P&ID of the job
+async function latestScope(jobNo) {
+  const { rows } = await queryEpulse(
+    `SELECT d.id AS "documentId", d.rev_label AS rev, m.id AS "masterIndexId", m.pid_name AS "pidName"
+     FROM pid_documents d JOIN pid_master_index m ON m.id = d.master_index_id
+     WHERE m.job_no = $1 AND m.status = 'active' AND d.status = 'current'`,
+    [jobNo]
+  );
+  return {
+    docIds: rows.map((r) => r.documentId),
+    pidNames: rows.map((r) => r.pidName),
+    pinned: new Map(rows.map((r) => [r.pidName, r])),
+  };
+}
 
 const combine = (value, unit) => (value ? [value, unit].filter(Boolean).join(' ') : null);
 
@@ -61,7 +75,7 @@ async function getSublines(jobNo, unitNo, scope, service, lsrNo) {
   return rows.map((r) => r.sub);
 }
 
-// Every line of the folder as "service|seq" (seq with "-sub-line") — summaries
+// Every line open for MTO as "service|seq" (seq with "-sub-line") — summaries
 async function getLineKeys(jobNo, unitNo, scope) {
   const { rows } = await queryEpulse(
     `SELECT service || '|' || line_no AS k FROM line_list WHERE ${LL_SCOPE}
@@ -143,7 +157,7 @@ async function getLineData(jobNo, unitNo, scope, service, lsrNo, sublineNo = '')
   return mergeSources({ unitNo, service, lsrNo, sublineNo, ll: ll[0] || null, pid });
 }
 
-// Line data for many lines of the folder at once (lists of saved zones):
+// Line data for many lines at once (lists of saved zones):
 // two queries, merged in memory. Returns Map "service|lsr|subline" → data.
 async function getLineDataBulk(jobNo, unitNo, scope, keys) {
   const out = new Map();
@@ -185,9 +199,9 @@ async function latestLineList(jobNo) {
   return rows[0] || null;
 }
 
-// The line data plus WHICH revisions it came from: the folder's pinned
-// revision of each P&ID (P&IDs named by the line list but not in the folder
-// have none) and the job's latest line-list upload revision.
+// The line data plus WHICH revisions it came from: the latest revision of
+// each P&ID (a P&ID the line list names but ePULSE has no drawing of has
+// none) and the job's latest line-list upload revision.
 function basisOf(line, scope, lineList) {
   const names = String(line.pidNo || '').split(',').map((s) => s.trim()).filter(Boolean).sort();
   return {
@@ -196,7 +210,7 @@ function basisOf(line, scope, lineList) {
     dataMismatch: line.dataMismatch || null,
     pids: names.map((n) => {
       const p = scope.pinned.get(n);
-      return p ? { pidName: n, rev: p.rev, documentId: p.documentId } : { pidName: n, rev: null, documentId: null, notInFolder: true };
+      return p ? { pidName: n, rev: p.rev, documentId: p.documentId } : { pidName: n, rev: null, documentId: null, notUploaded: true };
     }),
     lineList,
   };
@@ -222,7 +236,7 @@ function compareBasis(saved, now) {
   const was = rev(saved.pids), cur = rev(now.pids);
   for (const name of new Set([...was.keys(), ...cur.keys()])) {
     if (was.get(name) !== cur.get(name)) {
-      out.push({ field: 'pid', label: `P&ID ${name}`, was: was.has(name) ? `Rev ${was.get(name) ?? '— (not in folder)'}` : '—', now: cur.has(name) ? `Rev ${cur.get(name) ?? '— (not in folder)'}` : '—' });
+      out.push({ field: 'pid', label: `P&ID ${name}`, was: was.has(name) ? `Rev ${was.get(name) ?? '— (no drawing)'}` : '—', now: cur.has(name) ? `Rev ${cur.get(name) ?? '— (no drawing)'}` : '—' });
     }
   }
   const llRev = (b) => (b && b.lineList ? b.lineList.revNo : null);
@@ -231,6 +245,6 @@ function compareBasis(saved, now) {
 }
 
 module.exports = {
-  getServices, getLsrNos, getSublines, getLineKeys, getLineData, getLineDataBulk,
+  latestScope, getServices, getLsrNos, getSublines, getLineKeys, getLineData, getLineDataBulk,
   getBasis, getBasisBulk, compareBasis, BASIS_FIELDS,
 };

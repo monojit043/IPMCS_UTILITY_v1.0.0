@@ -15,14 +15,14 @@ function normalizeStroke(stroke) {
   return { zone: stroke.zone || null, points: stroke.points || [] };
 }
 
-// Highlights belong to one drawing REVISION (rev.revDocId = ePULSE
-// pid_documents.id): the revision pinned in the MTO folder they were made in.
-// document_id still records the drawing (pid_master_index id).
+// Highlights are made on one MTO folder's COPY of a drawing (rev.fileId =
+// mto_folder_files.id); revision_doc_id / document_id also record which
+// ePULSE revision / drawing that copy is.
 async function getAllForDocument(rev, pageNum) {
   const { rows } = await query(
     `SELECT emp_id AS "userId", emp_id AS "empId", strokes
-     FROM pid_user_highlights WHERE revision_doc_id = $1 AND page_num = $2 ORDER BY emp_id`,
-    [rev.revDocId, pageNum]
+     FROM pid_user_highlights WHERE folder_file_id = $1 AND page_num = $2 ORDER BY emp_id`,
+    [rev.fileId, pageNum]
   );
   const withStrokes = rows.filter((r) => r.strokes && r.strokes.length);
   const names = await namesFor(withStrokes.map((r) => r.empId));
@@ -31,8 +31,8 @@ async function getAllForDocument(rev, pageNum) {
 
 async function getMine(rev, pageNum, userId) {
   const { rows } = await query(
-    `SELECT strokes FROM pid_user_highlights WHERE revision_doc_id = $1 AND page_num = $2 AND emp_id = $3`,
-    [rev.revDocId, pageNum, userId]
+    `SELECT strokes FROM pid_user_highlights WHERE folder_file_id = $1 AND page_num = $2 AND emp_id = $3`,
+    [rev.fileId, pageNum, userId]
   );
   return rows[0] ? rows[0].strokes : [];
 }
@@ -41,10 +41,10 @@ async function upsertMine(rev, pageNum, userId, strokes) {
   const previous = await getMine(rev, pageNum, userId);
 
   await query(
-    `INSERT INTO pid_user_highlights (revision_doc_id, document_id, page_num, emp_id, strokes, updated_at)
-     VALUES ($1,$5,$2,$3,$4,now())
-     ON CONFLICT (revision_doc_id, page_num, emp_id) DO UPDATE SET strokes = $4, updated_at = now()`,
-    [rev.revDocId, pageNum, userId, JSON.stringify(strokes), rev.masterIndexId]
+    `INSERT INTO pid_user_highlights (folder_file_id, revision_doc_id, document_id, page_num, emp_id, strokes, updated_at)
+     VALUES ($1,$6,$5,$2,$3,$4,now())
+     ON CONFLICT (folder_file_id, page_num, emp_id) DO UPDATE SET strokes = $4, updated_at = now()`,
+    [rev.fileId, pageNum, userId, JSON.stringify(strokes), rev.masterIndexId, rev.revDocId]
   );
 
   // A stroke was appended (not undone/cleared) — check whether it touches
@@ -73,8 +73,8 @@ async function detectZoneBreak(rev, pageNum, userId, newStroke, myOtherStrokes) 
 
   const { rows: others } = await query(
     `SELECT emp_id AS "userId", strokes FROM pid_user_highlights
-     WHERE revision_doc_id = $1 AND page_num = $2 AND emp_id != $3`,
-    [rev.revDocId, pageNum, userId]
+     WHERE folder_file_id = $1 AND page_num = $2 AND emp_id != $3`,
+    [rev.fileId, pageNum, userId]
   );
 
   const candidates = [];
@@ -106,8 +106,8 @@ async function recordZoneBreak(rev, pageNum, point, userIdA, zoneA, userIdB, zon
 
   const { rows: existing } = await query(
     `SELECT id, x, y FROM pid_zone_breaks
-     WHERE revision_doc_id = $1 AND page_num = $2 AND emp_a = $3 AND emp_b = $4`,
-    [rev.revDocId, pageNum, userIdA, userIdB]
+     WHERE folder_file_id = $1 AND page_num = $2 AND emp_a = $3 AND emp_b = $4`,
+    [rev.fileId, pageNum, userIdA, userIdB]
   );
   const nearby = existing.find((e) => distance([e.x, e.y], point) <= ZONE_BREAK_THRESHOLD * 2);
   if (nearby) {
@@ -120,9 +120,9 @@ async function recordZoneBreak(rev, pageNum, point, userIdA, zoneA, userIdB, zon
   }
 
   await query(
-    `INSERT INTO pid_zone_breaks (revision_doc_id, document_id, page_num, x, y, emp_a, emp_b, zone_a, zone_b)
-     VALUES ($1,$9,$2,$3,$4,$5,$6,$7,$8)`,
-    [rev.revDocId, pageNum, point[0], point[1], userIdA, userIdB, zoneA, zoneB, rev.masterIndexId]
+    `INSERT INTO pid_zone_breaks (folder_file_id, revision_doc_id, document_id, page_num, x, y, emp_a, emp_b, zone_a, zone_b)
+     VALUES ($1,$10,$9,$2,$3,$4,$5,$6,$7,$8)`,
+    [rev.fileId, pageNum, point[0], point[1], userIdA, userIdB, zoneA, zoneB, rev.masterIndexId, rev.revDocId]
   );
 }
 
@@ -130,8 +130,8 @@ async function getZoneBreaks(rev, pageNum) {
   const { rows } = await query(
     `SELECT id, x, y, emp_a AS "userAId", emp_b AS "userBId", emp_a AS "userAEmpId", emp_b AS "userBEmpId",
             zone_a AS "zoneA", zone_b AS "zoneB"
-     FROM pid_zone_breaks WHERE revision_doc_id = $1 AND page_num = $2 ORDER BY id`,
-    [rev.revDocId, pageNum]
+     FROM pid_zone_breaks WHERE folder_file_id = $1 AND page_num = $2 ORDER BY id`,
+    [rev.fileId, pageNum]
   );
   const names = await namesFor(rows.flatMap((r) => [r.userAEmpId, r.userBEmpId]));
   return rows.map((r) => ({

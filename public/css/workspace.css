@@ -161,6 +161,14 @@ html, body { height: 100%; overflow: hidden; }
 .pid-card-icon { font-size: 32px; color: var(--color-accent-strong); }
 .pid-card-title { font-family: var(--font-display); font-size: 12px; font-weight: 700; color: var(--text-primary); word-break: break-word; }
 .pid-card-sub { font-size: 10px; color: var(--text-muted); }
+.pid-card-dl { display: flex; gap: 6px; margin-top: 4px; }
+.pid-card-dl button {
+  display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; font-size: 10px; cursor: pointer;
+  background: var(--color-surface-raised); color: var(--text-secondary);
+  border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm);
+}
+.pid-card-dl button:hover { border-color: var(--color-border-accent); color: var(--text-primary); }
+.pid-card-dl button:disabled { opacity: 0.45; cursor: default; }
 .pid-empty-hint { grid-column: 1 / -1; text-align: center; padding: 40px; color: var(--text-faint); font-size: 12px; }
 
 .pid-user-legend { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }

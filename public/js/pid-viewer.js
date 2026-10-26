@@ -85,8 +85,9 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     document.title = (line ? 'P&ID — ' + line.lineNo : doc.pidName) + ' · IPMCS';
     document.getElementById('viewerTitle').textContent = line ? 'P&ID — ' + line.lineNo : doc.pidName;
-    document.getElementById('sheetBadge').textContent = 'Rev ' + (doc.revLabel || '—') +
-      (doc.isCurrent === false && doc.currentRevLabel ? ` · newer Rev ${doc.currentRevLabel} in ePULSE` : '');
+    // the MTO folder's own copy of the drawing (kept in IPMCS)
+    document.getElementById('sheetBadge').textContent = 'Rev ' + (doc.revLabel || '—') + ' · ' + doc.folderName + ' copy' +
+      (doc.newerRev ? ` · newer Rev ${doc.newerRev} in ePULSE` : '');
 
     pdfDoc = await pdfjsLib.getDocument({ url: pdfUrl, httpHeaders: DataStore.authHeaders() }).promise;
     document.getElementById('pdfLoading').classList.add('hidden');

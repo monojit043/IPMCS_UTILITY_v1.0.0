@@ -56,6 +56,48 @@ async function run() {
     console.log(`${rowCount} line + zone(s) of ${u.job_no} / ${u.unit_no} moved into folder "${fold.name}"`);
   }
 
+  // Folders frozen before their P&IDs were copied into IPMCS: copy the
+  // revision each was frozen at (pinned document_id) now.
+  const pimsPid = require('../services/pimsPid.service');
+  const folderFiles = require('../services/folderFiles.service');
+  const { rows: bare } = await query(
+    `SELECT f.id, f.name, f.frozen_by FROM pid_folders f WHERE f.status = 'frozen'
+     AND EXISTS (SELECT 1 FROM pid_folder_selections s WHERE s.folder_id = f.id
+                 AND NOT EXISTS (SELECT 1 FROM mto_folder_files ff WHERE ff.folder_id = f.id AND ff.master_index_id = s.pims_master_index_id))`);
+  for (const f of bare) {
+    const { rows: sel } = await query(`SELECT pims_master_index_id AS mi, document_id FROM pid_folder_selections WHERE folder_id = $1`, [f.id]);
+    const docs = [];
+    for (const s of sel) {
+      const doc = s.document_id ? await pimsPid.getRevision(s.document_id) : null;
+      const pdf = doc && folderFiles.readRevisionPdf(doc);
+      if (pdf) docs.push({ doc, pdf }); else console.warn(`Folder "${f.name}": no PDF for P&ID #${s.mi} (revision ${s.document_id}) — not copied`);
+    }
+    const client = await pool.connect();
+    try {
+      await folderFiles.copyIn(client, f.id, docs, f.frozen_by);
+    } finally {
+      client.release();
+    }
+    console.log(`Folder "${f.name}": ${docs.length} P&ID file(s) copied into IPMCS`);
+  }
+
+  // Highlights made before copies existed: onto the first frozen folder's copy of the same revision
+  for (const table of ['pid_user_highlights', 'pid_zone_breaks']) {
+    const { rowCount } = await query(
+      `UPDATE ${table} h SET folder_file_id = (
+         SELECT ff.id FROM mto_folder_files ff WHERE ff.document_id = h.revision_doc_id ORDER BY ff.folder_id, ff.id LIMIT 1)
+       WHERE h.folder_file_id IS NULL
+         AND EXISTS (SELECT 1 FROM mto_folder_files ff WHERE ff.document_id = h.revision_doc_id)`);
+    if (rowCount) console.log(`${table}: ${rowCount} row(s) attached to a folder copy`);
+  }
+  const { rows: stale } = await query(
+    `SELECT DISTINCT h.folder_file_id AS id FROM pid_user_highlights h JOIN mto_folder_files ff ON ff.id = h.folder_file_id
+     WHERE ff.highlighted_at IS NULL OR ff.highlighted_at < h.updated_at`);
+  for (const s of stale) await folderFiles.refreshHighlighted(s.id);
+  if (stale.length) console.log(`${stale.length} highlighted PDF copy(ies) written`);
+  const { rows: [{ n: loose3 }] } = await query(`SELECT count(*)::int AS n FROM pid_user_highlights WHERE folder_file_id IS NULL`);
+  if (loose3) console.log(`${loose3} older highlight row(s) are on no frozen folder copy — kept, not shown`);
+
   console.log('Done.');
   await Promise.all([pool.end(), epulsePool.end()]);
 }

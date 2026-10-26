@@ -2,9 +2,9 @@ const { query, queryEpulse } = require('../config/db');
 const lineData = require('./lineData.service');
 
 // MTO progress of one MTO folder: ePULSE's zone PLAN (piping_line_list, made
-// in ePULSE → Create Piping Line List → zone allocation) for the lines on the
-// folder's pinned P&IDs, side by side with what IPMCS has DONE in that folder
-// (line + zones saved with at least one MTO row).
+// in ePULSE → Create Piping Line List → zone allocation) for the unit's lines
+// (line list + latest P&IDs), side by side with what IPMCS has DONE in that
+// folder (line + zones saved with at least one MTO row).
 // A line is matched on service + LSR NO (+ "-" sub-line), zones on their letter.
 
 const keyOf = (service, seq) => `${String(service || '').trim()}|${String(seq || '').trim()}`;
@@ -20,7 +20,7 @@ async function getSummary(jobNo, unitNo, folder) {
        WHERE job_no = $1 AND unit_no = $2 AND folder_id = $3`,
       [jobNo, unitNo, folder.id]
     ),
-    lineData.getLineKeys(jobNo, unitNo, folder.scope),   // every line on the folder's P&IDs
+    lineData.getLineKeys(jobNo, unitNo, folder.scope),   // every line open for MTO
   ]);
   const plan = unitPlan.filter((p) => folderLines.has(keyOf(p.service, p.seq_no)));
   const src = { n: folderLines.size };
@@ -73,9 +73,9 @@ async function getSummary(jobNo, unitNo, folder) {
 
   return {
     hasPlan: unitPlan.length > 0,
-    folder: { id: folder.id, name: folder.name, pids: folder.scope.pidNames.length },
+    folder: { id: folder.id, name: folder.name, pids: folder.drawings.pidNames.length },
     lines: {
-      inSources: src.n,                 // lines on the folder's P&IDs (+ their line-list lines)
+      inSources: src.n,                 // lines in the line list + latest P&IDs
       planned: planned.size,            // lines with at least one zone in the plan
       started,                          // MTO taken in at least one planned zone
       complete,                         // MTO taken in all planned zones

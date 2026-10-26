@@ -8,8 +8,8 @@ const highlightsController = require('../controllers/pidHighlights.controller');
 
 const router = express.Router();
 
-// MTO folders: the ML picks the latest P&IDs (each pinned at its revision
-// of that moment), then freezes the folder — MTO is taken only in frozen ones.
+// MTO folders: the ML picks P&IDs, then freezes the folder — that copies
+// each one's current revision PDF into IPMCS. MTO is taken only in frozen folders.
 router.get('/folders', asyncHandler(foldersController.list));
 router.post('/folders', requireRole('LEAD', 'ML'), asyncHandler(foldersController.create));
 router.post('/folders/:folderId/freeze', requireRole('LEAD', 'ML'), asyncHandler(foldersController.freeze));
@@ -22,17 +22,20 @@ router.delete(
   asyncHandler(foldersController.removeSelection)
 );
 
-// Live ePULSE lookups — the "tick which P&IDs to add" list (current revisions),
-// a line's drawing inside the MTO folder, one revision and its PDF.
+// Live ePULSE lookups — the "tick which P&IDs to add" list (current
+// revisions) and the preview of an open folder's P&IDs.
 router.get('/pims/available', asyncHandler(pimsPidController.listAvailable));
-router.get('/line-document', requireFolder(), asyncHandler(pimsPidController.getForLine));
 router.get('/revisions/:revId', asyncHandler(pimsPidController.getRevision));
 router.get('/revisions/:revId/file', asyncHandler(pimsPidController.streamRevision));
 
-// Highlights are per drawing revision (:revId = ePULSE pid_documents.id)
-router.get('/revisions/:revId/highlights', asyncHandler(highlightsController.getAll));
-router.get('/revisions/:revId/highlights/mine', asyncHandler(highlightsController.getMine));
-router.put('/revisions/:revId/highlights/mine', asyncHandler(highlightsController.putMine));
-router.get('/revisions/:revId/zone-breaks', asyncHandler(highlightsController.getZoneBreaks));
+// A frozen folder's own copies (kept in IPMCS): fresh + highlighted PDF,
+// the copy a line is on, and the highlights made on a copy
+router.get('/line-document', requireFolder(), asyncHandler(pimsPidController.getForLine));
+router.get('/folder-files/:fileId', asyncHandler(pimsPidController.getFile));
+router.get('/folder-files/:fileId/pdf', asyncHandler(pimsPidController.streamFile));
+router.get('/folder-files/:fileId/highlights', asyncHandler(highlightsController.getAll));
+router.get('/folder-files/:fileId/highlights/mine', asyncHandler(highlightsController.getMine));
+router.put('/folder-files/:fileId/highlights/mine', asyncHandler(highlightsController.putMine));
+router.get('/folder-files/:fileId/zone-breaks', asyncHandler(highlightsController.getZoneBreaks));
 
 module.exports = router;

@@ -1,4 +1,15 @@
+const path = require('path');
 const { queryEpulse } = require('../config/db');
+
+// Full path of an ePULSE upload — pid_documents.file_path ("B862/101/PID/…pdf")
+// is relative to ePULSE's uploads folder (EPULSE_UPLOADS_ROOT). null if outside it.
+function uploadPath(filePath) {
+  const root = process.env.EPULSE_UPLOADS_ROOT;
+  if (!root) throw new Error('EPULSE_UPLOADS_ROOT is not configured');
+  const base = path.resolve(root);
+  const full = path.resolve(base, filePath || '');
+  return full.startsWith(base + path.sep) ? full : null;
+}
 
 // P&IDs come from ePULSE's P&ID module (index + uploaded drawings), read
 // live — IPMCS keeps no copy. Only the CURRENT revision of an ACTIVE sheet.
@@ -54,7 +65,7 @@ async function getRevision(documentId) {
   return rows[0] || null;
 }
 
-// Which of an MTO folder's pinned drawings a line is on. First choice: a
+// Which of an MTO folder's drawings (scope = folder.drawings) a line is on. First choice: a
 // pinned revision the line was actually read off (pid_extracted_lines).
 // Otherwise the P&ID no(s). the line list gives for it (may be "A, B"),
 // if the folder holds them.
@@ -86,4 +97,4 @@ async function findForLine(jobNo, unitNo, scope, service, seqNo) {
   return null;
 }
 
-module.exports = { listAvailable, getCurrentDocument, getRevision, findForLine };
+module.exports = { uploadPath, listAvailable, getCurrentDocument, getRevision, findForLine };

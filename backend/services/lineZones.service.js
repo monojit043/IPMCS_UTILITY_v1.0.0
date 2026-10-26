@@ -135,7 +135,7 @@ async function getZoneFull(id, folder) {
   if (last) {
     basisChanges = line
       ? lineData.compareBasis(last.basis, await lineData.getBasis(zone.jobNo, line, folder.scope))
-      : [{ field: 'line', label: 'Line', was: last.basis.lineNo, now: "no longer on this MTO folder's P&IDs / line list" }];
+      : [{ field: 'line', label: 'Line', was: last.basis.lineNo, now: 'no longer in the line list / latest P&IDs' }];
   }
   const lastRev = last ? (({ basis, ...rest }) => rest)(last) : null;
   return { zone, line, mto, dump, extracted, lastRevision: lastRev, basisChanges };
@@ -168,7 +168,7 @@ async function saveZone({ jobNo, unitNo, empId, folder, service, lsrNo, sublineN
   const table = ITEM_TABLES[kind];
   if (!table) throw new InputError('kind must be mto or dump');
   const line = await lineData.getLineData(jobNo, unitNo, folder.scope, service, lsrNo, sublineNo || '');
-  if (!line) throw new InputError(`This line is not on the P&IDs of MTO folder "${folder.name}"`);
+  if (!line) throw new InputError('This line is not in the line list or on the latest P&IDs');
   const h = cleanHeader(header);
   const values = cleanRows(rows);
   const basis = await lineData.getBasis(jobNo, line, folder.scope);   // what this save is based on

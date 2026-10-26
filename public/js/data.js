@@ -296,29 +296,47 @@ const DataStore = (() => {
   function freezePidFolder(folderId) {
     return apiFetch(`/pid/folders/${folderId}/freeze`, { method: 'POST' });
   }
-  // One drawing REVISION (ePULSE pid_documents.id) — the one pinned in a folder
-  function getPidDocument(revId) {
-    return apiFetch(`/pid/revisions/${revId}`);
+  // A frozen MTO folder's COPY of a drawing, kept in IPMCS (fileId)
+  function getPidDocument(fileId) {
+    return apiFetch(`/pid/folder-files/${fileId}`);
   }
-  // The drawing a line is on, among the current MTO folder's pinned revisions
+  // The current MTO folder's copy of the drawing a line is on
   function getPidDocumentForLine(service, lsr, subline) {
     return apiFetch('/pid/line-document' + qs({ service, lsr, subline: subline || '' }));
   }
-  function pidFileUrl(revId) {
+  // kind: 'fresh' (as issued) | 'highlighted' (everyone's highlights drawn in)
+  function pidFileUrl(fileId, kind = 'fresh') {
+    return `${API_BASE}/pid/folder-files/${fileId}/pdf?kind=${kind}`;
+  }
+  // An OPEN folder's P&ID, previewed live from ePULSE (pid_documents.id)
+  function pidRevisionFileUrl(revId) {
     return `${API_BASE}/pid/revisions/${revId}/file`;
   }
+  // Saves a folder copy (fresh / highlighted PDF) as a file
+  async function downloadPidCopy(fileId, kind) {
+    const res = await fetch(pidFileUrl(fileId, kind) + '&download=1', { cache: 'no-store', headers: authHeaders() });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || res.statusText);
+    }
+    const name = ((res.headers.get('Content-Disposition') || '').match(/filename="([^"]+)"/) || [])[1] || `${kind}.pdf`;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(await res.blob());
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
 
-  /* ── P&ID highlighter annotations, per drawing revision (ePULSE
-     pid_documents.id) + page + user ── */
+  /* ── P&ID highlighter annotations, per folder copy (fileId) + page + user ── */
   function getDocumentHighlights(docId, page) {
-    return apiFetch(`/pid/revisions/${docId}/highlights` + qs({ page }));
+    return apiFetch(`/pid/folder-files/${docId}/highlights` + qs({ page }));
   }
   async function getMyPidHighlights(docId, page) {
-    const { strokes } = await apiFetch(`/pid/revisions/${docId}/highlights/mine` + qs({ page }));
+    const { strokes } = await apiFetch(`/pid/folder-files/${docId}/highlights/mine` + qs({ page }));
     return strokes;
   }
   async function setMyPidHighlights(docId, page, strokes) {
-    const res = await apiFetch(`/pid/revisions/${docId}/highlights/mine` + qs({ page }), {
+    const res = await apiFetch(`/pid/folder-files/${docId}/highlights/mine` + qs({ page }), {
       method: 'PUT',
       body: JSON.stringify({ strokes }),
     });
@@ -326,7 +344,7 @@ const DataStore = (() => {
   }
   // Auto-detected junctions where two different users' highlights touch.
   function getPidZoneBreaks(docId, page) {
-    return apiFetch(`/pid/revisions/${docId}/zone-breaks` + qs({ page }));
+    return apiFetch(`/pid/folder-files/${docId}/zone-breaks` + qs({ page }));
   }
 
   return {
@@ -335,7 +353,7 @@ const DataStore = (() => {
     getLineZones, getLineZone, saveLineZone, getMtoSummary, searchLineZones, deleteLineZone, getTeam, searchEmployees, assignTeamMember, removeTeamMember, getZoneRevisions, getZoneRevision,
     getPidFolders, createPidFolder, getPidDocuments,
     getAvailablePimsDocuments, addPidFolderSelection, removePidFolderSelection, freezePidFolder,
-    getPidDocument, getPidDocumentForLine, pidFileUrl, authHeaders,
+    getPidDocument, getPidDocumentForLine, pidFileUrl, pidRevisionFileUrl, downloadPidCopy, authHeaders,
     getDocumentHighlights, getMyPidHighlights, setMyPidHighlights, getPidZoneBreaks,
   };
 })();

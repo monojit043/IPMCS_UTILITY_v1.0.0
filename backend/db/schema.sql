@@ -358,9 +358,11 @@ ALTER TABLE pid_zone_breaks ADD COLUMN IF NOT EXISTS zone_b VARCHAR(10);
 -- ── MTO folders: fixed sets of P&ID revisions (decided 2026-10-26) ──
 -- An ML / Lead builds a folder (MTO-1, MTO-2 …); each P&ID added is PINNED at
 -- the revision current at that moment (document_id = ePULSE pid_documents.id).
--- "Freeze" locks the folder; JEs take MTO only in frozen folders, only for
--- lines on its pinned P&IDs, and MTO is separate per folder. A newer revision
--- is for the next MTO folder. Highlights are per drawing revision.
+-- "Freeze" locks the folder and copies each P&ID's then-current revision PDF
+-- into IPMCS (mto_folder_files). JEs take MTO only in frozen folders and MTO
+-- is separate per folder; the LINES open for MTO are always every line-list
+-- line + every line on the latest P&IDs. Highlights are made on the folder's
+-- copies; each copy keeps its fresh PDF and a highlighted PDF.
 ALTER TABLE pid_folders ADD COLUMN IF NOT EXISTS status VARCHAR(10) NOT NULL DEFAULT 'open';
 ALTER TABLE pid_folders ADD COLUMN IF NOT EXISTS frozen_by VARCHAR(50);
 ALTER TABLE pid_folders ADD COLUMN IF NOT EXISTS frozen_at TIMESTAMPTZ;
@@ -370,6 +372,29 @@ ALTER TABLE pid_user_highlights ADD COLUMN IF NOT EXISTS revision_doc_id INTEGER
 ALTER TABLE pid_zone_breaks ADD COLUMN IF NOT EXISTS revision_doc_id INTEGER;
 ALTER TABLE mto_line_zones ADD COLUMN IF NOT EXISTS folder_id INTEGER REFERENCES pid_folders(id);
 ALTER TABLE mto_line_zone_deletions ADD COLUMN IF NOT EXISTS folder_id INTEGER;
+
+-- The P&ID files of a frozen MTO folder, copied out of ePULSE at Freeze:
+-- fresh_pdf = the drawing as issued, highlighted_pdf = the same with every
+-- engineer's highlights drawn in (rewritten on each highlight save).
+CREATE TABLE IF NOT EXISTS mto_folder_files (
+  id               SERIAL PRIMARY KEY,
+  folder_id        INTEGER NOT NULL REFERENCES pid_folders(id) ON DELETE CASCADE,
+  master_index_id  INTEGER NOT NULL,       -- ePULSE pid_master_index.id (the drawing)
+  document_id      INTEGER NOT NULL,       -- ePULSE pid_documents.id (the revision copied)
+  pid_name         VARCHAR(150) NOT NULL,
+  rev_label        VARCHAR(20),
+  file_name        VARCHAR(255),
+  fresh_pdf        BYTEA NOT NULL,
+  fresh_size       INTEGER NOT NULL,
+  fresh_sha256     CHAR(64) NOT NULL,
+  highlighted_pdf  BYTEA,
+  highlighted_at   TIMESTAMPTZ,
+  copied_by        VARCHAR(50),            -- employee ID who froze the folder
+  copied_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (folder_id, master_index_id)
+);
+ALTER TABLE pid_user_highlights ADD COLUMN IF NOT EXISTS folder_file_id INTEGER REFERENCES mto_folder_files(id) ON DELETE CASCADE;
+ALTER TABLE pid_zone_breaks ADD COLUMN IF NOT EXISTS folder_file_id INTEGER REFERENCES mto_folder_files(id) ON DELETE CASCADE;
 DO $$
 DECLARE r record;
 BEGIN
@@ -385,14 +410,15 @@ BEGIN
     ALTER TABLE mto_line_zones ADD CONSTRAINT mto_line_zones_folder_line_zone_key
       UNIQUE (folder_id, job_no, unit_no, service, lsr_no, subline_no, zone);
   END IF;
-  -- highlights unique per drawing revision
+  -- highlights unique per folder copy (drop older per-sheet / per-revision keys)
   FOR r IN SELECT conname FROM pg_constraint WHERE conrelid = 'pid_user_highlights'::regclass AND contype = 'u'
-           AND conname <> 'pid_user_highlights_rev_page_emp_key' LOOP
+           AND conname <> 'pid_user_highlights_file_page_emp_key' LOOP
     EXECUTE format('ALTER TABLE pid_user_highlights DROP CONSTRAINT %I', r.conname);
   END LOOP;
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'pid_user_highlights_rev_page_emp_key') THEN
-    ALTER TABLE pid_user_highlights ADD CONSTRAINT pid_user_highlights_rev_page_emp_key UNIQUE (revision_doc_id, page_num, emp_id);
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'pid_user_highlights_file_page_emp_key') THEN
+    ALTER TABLE pid_user_highlights ADD CONSTRAINT pid_user_highlights_file_page_emp_key UNIQUE (folder_file_id, page_num, emp_id);
   END IF;
 END $$;
 CREATE INDEX IF NOT EXISTS idx_mto_line_zones_folder ON mto_line_zones (folder_id);
 CREATE INDEX IF NOT EXISTS idx_pid_zone_breaks_rev ON pid_zone_breaks (revision_doc_id, page_num);
+CREATE INDEX IF NOT EXISTS idx_pid_zone_breaks_file ON pid_zone_breaks (folder_file_id, page_num);

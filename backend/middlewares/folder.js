@@ -1,10 +1,13 @@
 const { query, queryEpulse } = require('../config/db');
+const { latestScope } = require('../services/lineData.service');
 
 // MTO is always taken inside one FROZEN MTO folder of the unit being worked
-// in. The page sends it as X-Folder-Id; this loads it with its pinned P&ID
-// revisions as req.folder = { id, name, status, frozenBy, frozenAt, scope },
-// where scope = { docIds, pidNames, pinned: Map pidName → { rev, documentId, masterIndexId } }
-// (the shape services/lineData.service.js works with).
+// in (MTO is kept per folder). The page sends it as X-Folder-Id; this loads
+// req.folder = { id, name, status, frozenBy, frozenAt, scope, drawings }:
+//   scope    = the lines open for MTO — always every line-list line + every
+//              line on the job's LATEST P&IDs (lineData.latestScope)
+//   drawings = the folder's own P&IDs at their frozen revisions, same shape
+//              { docIds, pidNames, pinned: Map pidName → { rev, documentId, masterIndexId } }
 async function loadFolder(folderId) {
   const { rows: [f] } = await query(
     `SELECT id, job_no AS "jobNo", unit_no AS "unitNo", name, status, frozen_by AS "frozenBy", frozen_at AS "frozenAt"
@@ -21,7 +24,8 @@ async function loadFolder(folderId) {
   const nameOf = new Map(docs.map((d) => [d.documentId, d.pidName]));
   const pinned = new Map();
   sel.forEach((s) => { const n = nameOf.get(s.documentId); if (n) pinned.set(n, s); });
-  f.scope = { docIds: sel.map((s) => s.documentId), pidNames: [...pinned.keys()], pinned };
+  f.drawings = { docIds: sel.map((s) => s.documentId), pidNames: [...pinned.keys()], pinned };
+  f.scope = await latestScope(f.jobNo);
   return f;
 }
 

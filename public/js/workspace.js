@@ -345,12 +345,12 @@ function renderMtoProgress(s) {
         ${stat('Left', L.left, L.left ? 'warn' : '')}
       </div>
       <div class="mp-bar"><span style="width:${pct(L.started, L.planned)}%"></span></div>
-      <div class="mp-note">${pct(L.started, L.planned)}% of planned lines started · the folder's P&amp;IDs have ${L.inSources} lines${L.inSources > L.planned ? ` — ${L.inSources - L.planned} not in the zone plan yet` : ''}</div>
+      <div class="mp-note">${pct(L.started, L.planned)}% of planned lines started · line list + latest P&amp;IDs have ${L.inSources} lines${L.inSources > L.planned ? ` — ${L.inSources - L.planned} not in the zone plan yet` : ''}</div>
     </div>` : `
     <div class="mp-card">
       <div class="mp-title">Lines — MTO progress · ${escAttr(s.folder.name)} (${s.folder.pids} P&amp;IDs)</div>
       <div class="mp-stats">
-        ${stat("Lines on the folder's P&amp;IDs", L.inSources)}
+        ${stat('Lines in line list + latest P&amp;IDs', L.inSources)}
         ${stat('Lines in zone plan', 0, 'warn')}
       </div>
       <div class="mp-note">No zone plan for this unit (${escAttr(unit || '')}) in ePULSE yet. Allocate zones in
@@ -1269,7 +1269,7 @@ function createMtoController(cfg) {
     const d = state.lineData;
     try {
       const doc = await DataStore.getPidDocumentForLine(d.service, d.lsrNo, d.sublineNo);
-      const qs = new URLSearchParams({ doc: doc.documentId, lineNo: d.lineNo });   // the folder's pinned revision
+      const qs = new URLSearchParams({ doc: doc.fileId, lineNo: d.lineNo });   // the MTO folder's copy
       if (state.zone) qs.set('zone', state.zone);
       window.open(`pid-viewer.html?${qs}`, 'ipmcs_pid_viewer_' + cfg.key, 'width=1100,height=800');
     } catch (err) {
@@ -1551,14 +1551,27 @@ function renderPidDocGrid(isAdmin) {
     grid.innerHTML = `<div class="pid-empty-hint">No P&amp;IDs selected into this folder yet${isAdmin ? ' — select one from PIMS to get started.' : '.'}</div>`;
     return;
   }
+  // Frozen folder: its own copies (kept in IPMCS) — fresh + highlighted PDF.
+  // Open folder: the current ePULSE revision Freeze will copy.
   grid.innerHTML = pidDocs.map(d => `
     <div class="pid-card" data-master-index-id="${d.masterIndexId}">
       <i class="ti ti-file-type-pdf pid-card-icon"></i>
       <div class="pid-card-title">${escAttr(d.pidName)}</div>
-      <div class="pid-card-sub">Rev ${escAttr(d.revLabel || '—')} · ${escAttr(d.uploadedBy || 'Unknown')} · ${new Date(d.uploadedAt).toLocaleDateString('en-IN')}</div>
+      <div class="pid-card-sub">Rev ${escAttr(d.revLabel || '—')}${d.fileId ? ' · copy in IPMCS' : ' · current in ePULSE'} · ${escAttr(d.uploadedBy || 'Unknown')} · ${d.uploadedAt ? new Date(d.uploadedAt).toLocaleDateString('en-IN') : '—'}</div>
       ${d.newerRev ? `<div class="pid-card-sub pid-newer-rev" title="ePULSE has a newer revision — it goes into the next MTO folder">⚠ Rev ${escAttr(d.newerRev)} available</div>` : ''}
+      ${d.fileId ? `<div class="pid-card-dl">
+        <button data-dl="fresh" title="The drawing as copied at Freeze"><i class="ti ti-download"></i>Fresh</button>
+        <button data-dl="highlighted" ${d.hasHighlighted ? '' : 'disabled'} title="${d.hasHighlighted ? 'With every highlight drawn in · ' + new Date(d.highlightedAt).toLocaleString('en-IN') : 'Not highlighted yet'}"><i class="ti ti-highlight"></i>Highlighted</button>
+      </div>` : ''}
     </div>
   `).join('');
+  grid.querySelectorAll('[data-dl]').forEach(btn => {
+    btn.addEventListener('click', async (ev) => {
+      ev.stopPropagation();
+      const doc = pidDocs.find(d => d.masterIndexId === Number(btn.closest('.pid-card').dataset.masterIndexId));
+      try { await DataStore.downloadPidCopy(doc.fileId, btn.dataset.dl); } catch (err) { showToast('error', 'Could not download', err.message); }
+    });
+  });
   grid.querySelectorAll('.pid-card').forEach(card => {
     card.addEventListener('click', () => {
       const doc = pidDocs.find(d => d.masterIndexId === Number(card.dataset.masterIndexId));
@@ -1578,7 +1591,8 @@ async function openPidDocument(doc) {
     `<i class="ti ti-loader-2 pdf-spin"></i><span>Loading P&ID…</span>`;
 
   try {
-    const url = DataStore.pidFileUrl(doc.documentId);   // the pinned revision
+    // frozen: the folder's copy (with its highlights); open: preview from ePULSE
+    const url = doc.fileId ? DataStore.pidFileUrl(doc.fileId) : DataStore.pidRevisionFileUrl(doc.documentId);
     pidStatusPdfDoc = await pdfjsLib.getDocument({ url, httpHeaders: DataStore.authHeaders() }).promise;
     document.getElementById('pidStatusLoading').classList.add('hidden');
     await renderPidStatusPage();
@@ -1607,10 +1621,12 @@ async function renderPidStatusPage() {
   let byUser = [];
   let zoneBreaks = [];
   try {
-    [byUser, zoneBreaks] = await Promise.all([
-      DataStore.getDocumentHighlights(pidActiveDoc.documentId, pidStatusPageNum),
-      DataStore.getPidZoneBreaks(pidActiveDoc.documentId, pidStatusPageNum),
-    ]);
+    if (pidActiveDoc.fileId) {   // highlights exist only on a frozen folder's copies
+      [byUser, zoneBreaks] = await Promise.all([
+        DataStore.getDocumentHighlights(pidActiveDoc.fileId, pidStatusPageNum),
+        DataStore.getPidZoneBreaks(pidActiveDoc.fileId, pidStatusPageNum),
+      ]);
+    }
   } catch (err) {
     showToast('error', 'Could not load highlight status', err.message);
   }
@@ -1806,7 +1822,7 @@ async function openPidSelectModal() {
 async function freezePidFolder() {
   const f = pidActiveFolder;
   if (!pidDocs.length) { showToast('error', 'Nothing to freeze', 'Select at least one P&ID first'); return; }
-  if (!confirm(`Freeze MTO folder "${f.name}" with ${pidDocs.length} P&ID(s) at their current revisions?\n\nAfter freezing its P&IDs can't be added, removed or moved to a newer revision — newer revisions go into the next MTO folder. Job engineers can then take MTO in it.`)) return;
+  if (!confirm(`Freeze MTO folder "${f.name}" with ${pidDocs.length} P&ID(s)?\n\nThe current revision of each P&ID is copied into IPMCS. After freezing its P&IDs can't be added, removed or moved to a newer revision — newer revisions go into the next MTO folder. Job engineers can then take MTO and highlight on these copies.`)) return;
   try {
     const frozen = await DataStore.freezePidFolder(f.id);
     showToast('success', `${f.name} frozen`, 'MTO can now be taken in this folder');
