@@ -19,10 +19,6 @@
     <div class="tb-brand"><i class="ti ti-package"></i>IPMCS</div>
     <div class="tb-right">
       <div class="project-pill" id="projectPillEl"><i class="ti ti-briefcase"></i>—</div>
-      <label class="project-pill folder-pill" title="MTO folder — the frozen set of P&amp;ID revisions MTO is taken on">
-        <i class="ti ti-folder-check"></i>MTO folder
-        <select id="folderSelect"><option value="">—</option></select>
-      </label>
       <button class="theme-toggle" title="Toggle light / dark theme">
         <i class="ti ti-sun"></i>
       </button>
@@ -212,6 +208,11 @@
           <div class="tab-btn" data-tab="pid"><i class="ti ti-topology-star"></i>P&amp;ID</div>
           <div class="tab-btn" data-tab="guideline"><i class="ti ti-book"></i>Guideline</div>
           <div class="tab-btn" data-tab="special"><i class="ti ti-star"></i>Special Item</div>
+          <!-- MTO folder being worked in: MTO is saved per frozen folder -->
+          <label class="tab-folder" title="MTO folder — MTO here is saved into this frozen folder; Summary and Reports follow it">
+            <i class="ti ti-folder-check"></i>MTO folder
+            <select id="folderSelect"><option value="">—</option></select>
+          </label>
         </div>
 
         <div class="tab-panels">
