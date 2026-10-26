@@ -7,7 +7,8 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "migrate": "node db/migrate.js",
-    "import-item-list": "node db/importItemList.js"
+    "import-item-list": "node db/importBomList.js item_list",
+    "import-assembly-dir": "node db/importBomList.js assembly_directory"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

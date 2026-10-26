@@ -438,9 +438,11 @@ CREATE INDEX IF NOT EXISTS idx_pid_zone_breaks_rev ON pid_zone_breaks (revision_
 CREATE INDEX IF NOT EXISTS idx_pid_zone_breaks_file ON pid_zone_breaks (folder_file_id, page_num);
 
 -- ─────────────────────────────────────────────────────────────────────────
--- Standard BoM item list ("ITEM LIST - STD.xls"), kept as is: the file
--- itself and each row of it, cell text verbatim (db/importItemList.js).
--- The current list feeds the Input Code dropdown of BoM entry.
+-- Standard BoM reference lists, kept as is: the file itself and each row of
+-- it, cell text verbatim (db/importBomList.js). kind = 'item_list' ("ITEM
+-- LIST - STD.xls", bom_item_list) or 'assembly_directory' ("IPMCS Assembly
+-- Directory.xls", bom_assembly_directory). The current file of each kind
+-- feeds the Input Code dropdown of BoM entry.
 CREATE TABLE IF NOT EXISTS bom_item_list_files (
   id           SERIAL PRIMARY KEY,
   file_name    VARCHAR(255) NOT NULL,
@@ -454,7 +456,9 @@ CREATE TABLE IF NOT EXISTS bom_item_list_files (
   imported_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   is_current   BOOLEAN NOT NULL DEFAULT false
 );
-CREATE UNIQUE INDEX IF NOT EXISTS bom_item_list_files_one_current ON bom_item_list_files (is_current) WHERE is_current;
+ALTER TABLE bom_item_list_files ADD COLUMN IF NOT EXISTS kind VARCHAR(30) NOT NULL DEFAULT 'item_list';
+DROP INDEX IF EXISTS bom_item_list_files_one_current;
+CREATE UNIQUE INDEX IF NOT EXISTS bom_item_list_files_one_current_kind ON bom_item_list_files (kind) WHERE is_current;
 CREATE TABLE IF NOT EXISTS bom_item_list (
   id         SERIAL PRIMARY KEY,
   file_id    INTEGER NOT NULL REFERENCES bom_item_list_files(id) ON DELETE CASCADE,
@@ -465,5 +469,21 @@ CREATE TABLE IF NOT EXISTS bom_item_list (
   grpcd      TEXT NOT NULL DEFAULT '',
   srno       TEXT NOT NULL DEFAULT '',
   selection  TEXT NOT NULL DEFAULT '',
+  UNIQUE (file_id, row_no)
+);
+
+-- Assembly directory: an assembly (ASMBCODE, usable as an Input Code) and,
+-- one row each, the elements it is made of with dia codes and quantity.
+CREATE TABLE IF NOT EXISTS bom_assembly_directory (
+  id        SERIAL PRIMARY KEY,
+  file_id   INTEGER NOT NULL REFERENCES bom_item_list_files(id) ON DELETE CASCADE,
+  row_no    INTEGER NOT NULL,          -- Excel row number
+  asmbcode  TEXT NOT NULL DEFAULT '',
+  elcd      TEXT NOT NULL DEFAULT '',
+  diacode1  TEXT NOT NULL DEFAULT '',
+  diacode2  TEXT NOT NULL DEFAULT '',
+  override  TEXT NOT NULL DEFAULT '',
+  jtype     TEXT NOT NULL DEFAULT '',
+  asqty     TEXT NOT NULL DEFAULT '',
   UNIQUE (file_id, row_no)
 );

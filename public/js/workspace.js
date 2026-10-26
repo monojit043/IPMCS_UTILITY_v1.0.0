@@ -145,15 +145,18 @@ async function switchUnit(unitNo) {
 
 
 /* ══════════════ STANDARD ITEM LIST (Input Code dropdown) ══════════════ */
-// SYMBOL → Input Code; a <datalist> so the JE can type to filter or pick
-let itemSymbols = new Map();   // UPPER(symbol) → symbol as in the list
+// Input Code = an item-list SYMBOL or an assembly-directory ASMBCODE; a
+// <datalist> so the JE can type to filter or pick
+let itemSymbols = new Map();   // UPPER(code) → code as in the list
 async function loadItemList() {
   try {
-    const { items } = await DataStore.getItemList();
-    itemSymbols = new Map(items.map(i => [i.symbol.toUpperCase(), i.symbol]));
+    const { items, assemblies } = await DataStore.getItemList();
+    itemSymbols = new Map([...items.map(i => i.symbol), ...assemblies.map(a => a.code)].map(c => [c.toUpperCase(), c]));
     let dl = document.getElementById('itemCodeList');
     if (!dl) { dl = document.createElement('datalist'); dl.id = 'itemCodeList'; document.body.appendChild(dl); }
-    dl.innerHTML = items.map(i => `<option value="${escAttr(i.symbol)}">${escAttr(i.descr)}${i.elmtcd ? ' · ' + escAttr(i.elmtcd) : ''}</option>`).join('');
+    const parts = (a) => a.components.map(c => `${c.elcd}×${c.asqty}`).join(' ');
+    dl.innerHTML = items.map(i => `<option value="${escAttr(i.symbol)}">${escAttr(i.descr)}${i.elmtcd ? ' · ' + escAttr(i.elmtcd) : ''}</option>`).join('')
+      + assemblies.map(a => `<option value="${escAttr(a.code)}">Assembly · ${escAttr(parts(a))}</option>`).join('');
   } catch (err) {
     showToast('error', 'Could not load the item list', err.message);
   }
@@ -1003,7 +1006,7 @@ function createMtoController(cfg) {
     const errs = [];
     if (!r.pipingClass) errs.push('Piping Class missing');
     if (!r.inputCode && !r.itemCode) errs.push('Input Code or Item Code required');
-    if (r.inputCode && itemSymbols.size && !itemSymbols.has(String(r.inputCode).trim().toUpperCase())) errs.push('Input Code not in the standard item list');
+    if (r.inputCode && itemSymbols.size && !itemSymbols.has(String(r.inputCode).trim().toUpperCase())) errs.push('Input Code not in the standard item list or assembly directory');
     if (!r.dia1) errs.push('Dia1 missing');
     if (!(parseFloat(r.qty) > 0)) errs.push('Qty must be more than 0');
     return errs;
