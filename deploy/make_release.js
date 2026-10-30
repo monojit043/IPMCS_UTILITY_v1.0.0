@@ -41,7 +41,7 @@ main(async () => {
 
   if (withModules) {
     console.log('Installing production node_modules (npm ci --omit=dev) ...');
-    run('npm', ['ci', '--omit=dev', '--no-audit', '--no-fund'], { cwd: path.join(staging, mod.appDir), shell: true });
+    run('npm ci --omit=dev --no-audit --no-fund', [], { cwd: path.join(staging, mod.appDir), shell: true });
   }
   for (const x of mod.releaseExtras || []) run(process.execPath, [path.join(ROOT, x.script), staging], { cwd: path.join(ROOT, mod.appDir) });
 

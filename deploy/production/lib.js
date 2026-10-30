@@ -29,7 +29,7 @@ function readEnv(root) {
 function setEnvValue(root, key, value) {
   const file = envFile(root);
   const text = fs.readFileSync(file, 'utf8');
-  const re = new RegExp(`^\\s*${key}\\s*=.*$`, 'm');
+  const re = new RegExp(`^[ \\t]*${key}[ \\t]*=[^\\r\\n]*`, 'm');
   fs.writeFileSync(file, re.test(text) ? text.replace(re, `${key}=${value}`) : `${text.replace(/\s*$/, '')}\r\n${key}=${value}\r\n`);
 }
 
@@ -115,17 +115,32 @@ function moveDir(src, dst) {
 const stamp = () => new Date().toISOString().slice(0, 16).replace(/[-:]/g, '').replace('T', '-');
 const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 
+// One reader for all questions, so typed-ahead / piped answers are not lost between them.
+// No more input (window closed, end of pipe) answers '' — i.e. "no".
+let rl = null;
+let closed = false;
+const pending = [];
+const waiting = [];
 function ask(question) {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  return new Promise((resolve) => rl.question(question, (a) => { rl.close(); resolve(a.trim()); }));
+  if (!rl) {
+    rl = readline.createInterface({ input: process.stdin });
+    rl.on('line', (l) => { const w = waiting.shift(); if (w) w(l.trim()); else pending.push(l.trim()); });
+    rl.on('close', () => { closed = true; while (waiting.length) waiting.shift()(''); });
+  }
+  process.stdout.write(question);
+  if (pending.length) return Promise.resolve(pending.shift());
+  if (closed) return Promise.resolve('');
+  return new Promise((resolve) => waiting.push(resolve));
 }
 
 // Runs main() and turns an error into a readable message + exit code 1 (the .bat shows it).
 function main(fn) {
-  fn().catch((err) => {
-    console.error(`\nFAILED: ${err.message}`);
-    process.exit(1);
-  });
+  fn()
+    .then(() => { if (rl) rl.close(); })
+    .catch((err) => {
+      console.error(`\nFAILED: ${err.message}`);
+      process.exit(1);
+    });
 }
 
 module.exports = {
