@@ -1,0 +1,17 @@
+{
+  "name": "IPMCS",
+  "title": "IPMCS Utility v1.0.0",
+  "installDir": "E:\\IPMCS_1.0",
+  "backupRoot": "E:\\backups\\IPMCS",
+  "port": 8090,
+  "appDir": "backend",
+  "startScript": "server.js",
+  "keep": ["backend/.env", "backend/uploads"],
+  "emptyDirs": [],
+  "dbEnv": { "host": "DB_HOST", "port": "DB_PORT", "name": "DB_NAME", "user": "DB_USER", "password": "DB_PASSWORD" },
+  "required": ["DB_PASSWORD", "EPULSE_DB_NAME", "EPULSE_UPLOADS_ROOT", "SSO_SECRET"],
+  "generate": ["JWT_SECRET"],
+  "migrate": [{ "script": "db/migrate.js" }],
+  "seed": [{ "script": "../deploy/production/load_reference_lists.js" }],
+  "releaseExtras": [{ "script": "deploy/export_reference_lists.js" }]
+}
